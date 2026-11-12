@@ -53,6 +53,7 @@ bash ~/fdonpose/scripts/run_d415.sh
 
 - [Jetson 安装与验证](docs/jetson_setup.md) · 从零部署、固定版本、平台问题和官方样例复现
 - [充电口离线回放](docs/charging_replay.md) · 从 `robot-ev-charging` 数据记录运行 YOLO、SAM2 和 FoundationPose
+- [管件 RGB-D 重建](docs/pipe_rgbd.md) · 奥比中光 335L 采集、网格重建与接入条件（尚未真机验证）
 - [标定板 v2](docs/tag_mount.md) · 双 M6 螺栓安装、两孔试装件和打印说明
 - [Windows 原生验证归档](docs/env/windows-validation-20261105.md) · 历史环境、验证数据和编译排障
 - [文档索引](docs/index.md) · [上游归属与许可](NOTICE.md)
