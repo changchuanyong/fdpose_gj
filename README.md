@@ -1,6 +1,6 @@
 # fdonpose
 
-在 Jetson AGX Orin 上估计充电口的 6D 位姿。实时入口使用 RealSense D415 获取 RGB-D，YOLO 给 SAM2.1 提供首帧检测框，FoundationPose 根据分割轮廓初始化并跟踪。
+在 Jetson AGX Orin 上估计零件的 6D 位姿。实时入口使用 RealSense D415 获取 RGB-D，YOLO-seg 或 YOLO 检测加 SAM2.1 提供目标掩膜，FoundationPose 根据掩膜初始化并跟踪。默认配置为充电口。
 
 ## 快速启动
 
@@ -19,9 +19,11 @@ bash ~/fdonpose/scripts/run_d415.sh
 | 更换 D415 | 追加 `--serial <SDK 序列号>` |
 | 按官方默认迭代次数初始化 | 追加 `--est-refine-iter 5`，本项目默认 3 轮 |
 
-窗口显示 `Aim at the socket` 时，让充电口正面及四个安装角完整入镜。出现 `Socket clipped` 时，把充电口移离画面边缘。
+窗口显示 `Aim at the target` 时，让目标完整入镜。出现 `Target clipped` 时，把目标移离画面边缘。
 
 如果 `FileNotFoundError` 指向 `~/ev-charging-d415/`，请改用上面的启动脚本。YOLO 权重位于 `~/fdonpose/weights/best.pt`，SAM2 权重位于 `~/fdonpose/weights/sam2.1_hiera_small.pt`。
+
+默认使用 YOLO 检测加 SAM2。已有零件分割权重时，追加 `--mask-backend yolo-seg --weights <分割权重>`。更换目标和后续接入 Gemini 335L 见[零件接入指南](docs/part_pose.md)。
 
 ## 运行与输出
 
@@ -32,7 +34,7 @@ bash ~/fdonpose/scripts/run_d415.sh
 | 文件 | 内容 |
 | --- | --- |
 | `poses.jsonl` | 输出帧的 `T_camera_target_m`，将目标坐标转换到相机光学坐标，平移单位为米 |
-| `initial_mask.jpg` | 首次通过注册检查的 SAM2 掩膜叠加图 |
+| `initial_mask.jpg` | 首次通过注册检查的目标掩膜叠加图 |
 | `first_pose.jpg`、`last_pose.jpg` | 首尾位姿叠加图 |
 | `summary.json` | 首帧注册耗时、实际跟踪帧率和恢复、重置次数 |
 | `drift/<帧号>/` | 复核失配时的前后 RGB-D、内参、候选/恢复位姿及验证指标 |

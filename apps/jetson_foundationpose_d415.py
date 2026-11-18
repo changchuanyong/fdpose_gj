@@ -1,7 +1,8 @@
-"""Measure live D415 → FoundationPose socket tracking on Jetson."""
+"""Track a configured part with live D415 RGB-D and FoundationPose on Jetson."""
 
 import argparse
 from collections import deque
+from contextlib import ExitStack
 from itertools import product
 import json
 import logging
@@ -12,12 +13,11 @@ import time
 
 import cv2
 import numpy as np
-import pyrealsense2 as rs
-import torch
-import trimesh
 
 from pose_checks import (MAX_REVIEW_ROTATION_DEG, MAX_REVIEW_TRANSLATION_M,
                          depth_alignment, pose_delta)
+from rgbd_camera import open_d415
+from target_segmentation import TargetDetector
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,12 +27,24 @@ RECOVERY_WINDOW_S = 3.0
 REGISTRATION_RETRY_S = 5.0
 
 
-def detect_socket(detector, bgr):
-    boxes = detector.predict(bgr, classes=[0], conf=0.50, device=0, verbose=False)[0].boxes
-    if not len(boxes):
-        return None
-    best = max(boxes, key=lambda box: float(box.conf.item()))
-    return best.xyxy[0].cpu().numpy(), float(best.conf.item())
+UNIT_TO_M = {"mm": 0.001, "m": 1.0}
+
+
+def load_cad_from_target(path):
+    geometry = json.loads(path.read_text(encoding="utf-8-sig"))
+    units = geometry.get("units", "mm")
+    if units not in UNIT_TO_M:
+        raise ValueError(f"Unsupported geometry units {units!r}: {path}")
+    target_from_cad = np.asarray(geometry["cad_to_target"], dtype=float)
+    if (target_from_cad.shape != (4, 4) or not np.isfinite(target_from_cad).all()
+            or not np.allclose(target_from_cad[3], [0, 0, 0, 1])):
+        raise ValueError(f"cad_to_target must be a finite 4x4 homogeneous transform: {path}")
+    rotation = target_from_cad[:3, :3]
+    if (not np.allclose(rotation.T @ rotation, np.eye(3), atol=1e-4)
+            or not np.isclose(np.linalg.det(rotation), 1, atol=1e-4)):
+        raise ValueError(f"cad_to_target must contain a proper rotation: {path}")
+    target_from_cad[:3, 3] *= UNIT_TO_M[units]
+    return np.linalg.inv(target_from_cad)
 
 
 def box_in_view(box, shape, margin=8):
@@ -92,12 +104,15 @@ class PreviewWindow:
         self.root.destroy()
 
 
-def main():
+def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--foundationpose", type=Path, default=ROOT / "third_party/FoundationPose")
     parser.add_argument("--mesh", type=Path, required=True)
-    parser.add_argument("--geometry", type=Path, required=True)
-    parser.add_argument("--weights", type=Path, required=True)
+    parser.add_argument("--mesh-units", choices=tuple(UNIT_TO_M), default="mm")
+    parser.add_argument("--geometry", type=Path, required=True, help="CAD-to-target transform JSON")
+    parser.add_argument("--weights", type=Path, required=True, help="YOLO weights for the selected backend")
+    parser.add_argument("--class-id", type=int, default=0, help="Target class ID in YOLO weights")
+    parser.add_argument("--mask-backend", choices=("sam2", "yolo-seg"), default="sam2")
     parser.add_argument("--sam2-checkpoint", type=Path, default=ROOT / "weights/sam2.1_hiera_small.pt")
     parser.add_argument("--serial", required=True, help="RealSense SDK serial")
     parser.add_argument("--output", type=Path, required=True)
@@ -105,11 +120,13 @@ def main():
     parser.add_argument("--stream-width", type=int, default=640)
     parser.add_argument("--stream-height", type=int, default=480)
     parser.add_argument("--init-width", type=int, default=640,
-                        help="Downscale SAM2 and registration to this width")
+                        help="Downscale RGB, depth and mask for registration to this width")
     parser.add_argument("--est-refine-iter", type=int, default=3,
-                        help="Register refinement iterations; official default 5, 3 measured within 0.12 mm / 0.28 deg on the socket")
+                        help="Registration refinement iterations")
     parser.add_argument("--show", action="store_true", help="Show live RGB and pose overlays on the Jetson desktop")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    if args.class_id < 0:
+        parser.error("--class-id must be nonnegative")
     if args.frames < 0:
         parser.error("--frames must be nonnegative")
     if args.stream_width <= 0 or args.stream_height <= 0 or args.init_width <= 0:
@@ -120,79 +137,53 @@ def main():
         parser.error(f"Project FoundationPose source not found: {args.foundationpose}")
     if args.show and not os.environ.get("DISPLAY"):
         parser.error("--show needs a desktop display. Run from a terminal on the Jetson desktop.")
-    if not args.sam2_checkpoint.is_file():
+    for path in (args.mesh, args.geometry, args.weights):
+        if not path.is_file():
+            parser.error(f"Input file not found: {path}")
+    if args.mask_backend == "sam2" and not args.sam2_checkpoint.is_file():
         parser.error(f"SAM2 checkpoint not found: {args.sam2_checkpoint}")
+    return args
+
+
+def main():
+    args = parse_args()
+    cad_from_target = load_cad_from_target(args.geometry)
+    import torch
+    import trimesh
+
     args.output.mkdir(parents=True, exist_ok=False)
     os.environ.setdefault("YOLO_CONFIG_DIR", str(args.output.parent / "ultralytics"))
     os.environ.setdefault("FDONPOSE_TMP", str(args.output / "tmp"))
     sys.path.insert(0, str(args.foundationpose.resolve()))
-    sys.path.insert(0, str(ROOT / "third_party/sam2"))
     from estimater import FoundationPose, draw_posed_3d_box, draw_xyz_axis, nvdiffrast_render, set_seed
-    from sam2.build_sam import build_sam2
-    from sam2.sam2_image_predictor import SAM2ImagePredictor
-    from ultralytics import YOLO
 
     logging.getLogger().setLevel(logging.WARNING)
     set_seed(0)
     if not torch.cuda.is_available():
         raise RuntimeError("FoundationPose requires CUDA")
     mesh = trimesh.load(args.mesh, force="mesh")
-    mesh.apply_scale(0.001)
+    mesh.apply_scale(UNIT_TO_M[args.mesh_units])
     corners = np.asarray(list(product(*mesh.bounds.T)))
-    target_from_cad = np.asarray(json.loads(args.geometry.read_text(encoding="utf-8-sig"))["cad_to_target"], dtype=float)
-    target_from_cad[:3, 3] /= 1000
-    cad_from_target = np.linalg.inv(target_from_cad)
+    detector = TargetDetector(args.weights, args.mask_backend, args.class_id)
+    segmenter = None
+    if args.mask_backend == "sam2":
+        sys.path.insert(0, str(ROOT / "third_party/sam2"))
+        from sam2.build_sam import build_sam2
+        from sam2.sam2_image_predictor import SAM2ImagePredictor
+
+        segmenter = SAM2ImagePredictor(build_sam2(
+            "configs/sam2.1/sam2.1_hiera_s.yaml", str(args.sam2_checkpoint),
+            device="cuda", apply_postprocessing=False,
+        ))
     estimator = FoundationPose(model_pts=mesh.vertices, model_normals=mesh.vertex_normals,
                                mesh=mesh, debug=0, debug_dir=str(args.output))
-    detector = YOLO(str(args.weights))
-    segmenter = SAM2ImagePredictor(build_sam2(
-        "configs/sam2.1/sam2.1_hiera_s.yaml", str(args.sam2_checkpoint),
-        device="cuda", apply_postprocessing=False,
-    ))
-    pipeline = rs.pipeline()
-    config = rs.config()
-    config.enable_device(args.serial)
-    config.enable_stream(rs.stream.color, args.stream_width, args.stream_height, rs.format.rgb8, 30)
-    config.enable_stream(rs.stream.depth, args.stream_width, args.stream_height, rs.format.z16, 30)
-    profile = pipeline.start(config)
-    preview = None
-    try:
-        if args.show:
-            preview = PreviewWindow()
-        device = profile.get_device()
-        serial = device.get_info(rs.camera_info.serial_number)
-        name = device.get_info(rs.camera_info.name)
-        if serial != args.serial or name.split()[-1] != "D415":
-            raise RuntimeError(f"Unexpected camera {name} {serial}")
-        color_profile = profile.get_stream(rs.stream.color).as_video_stream_profile()
-        depth_profile = profile.get_stream(rs.stream.depth).as_video_stream_profile()
-        intr = color_profile.get_intrinsics()
-        K = np.array([[intr.fx, 0, intr.ppx], [0, intr.fy, intr.ppy], [0, 0, 1]], dtype=float)
-        scale = device.first_depth_sensor().get_depth_scale()
-        coefficients = np.array(intr.coeffs, dtype=float)
-        rectify = None
-        if intr.model != rs.distortion.none and np.any(coefficients != 0):
-            if intr.model != rs.distortion.brown_conrady:
-                raise RuntimeError(f"Unsupported color distortion model {intr.model}")
-            rectify = cv2.initUndistortRectifyMap(K, coefficients, None, K, (intr.width, intr.height), cv2.CV_32FC1)
-        align = rs.align(rs.stream.color)
-        print(json.dumps({"camera": name, "serial": serial, "color_fps": color_profile.fps(),
-                          "rgb_resolution": [intr.width, intr.height],
-                          "depth_resolution": [depth_profile.width(), depth_profile.height()],
-                          "K": K.tolist(), "distortion": str(intr.model), "dist_coeffs": coefficients.tolist(),
-                          "depth_scale_m": scale}), flush=True)
-
-        def read_frame():
-            frames = align.process(pipeline.wait_for_frames(4000))
-            color, depth_frame = frames.get_color_frame(), frames.get_depth_frame()
-            if not color or not depth_frame:
-                raise RuntimeError("No aligned RGB-D pair")
-            rgb = np.asanyarray(color.get_data()).copy()
-            depth = np.asanyarray(depth_frame.get_data()).astype(np.float32) * scale
-            if rectify is not None:
-                rgb = cv2.remap(rgb, *rectify, cv2.INTER_LINEAR)
-                depth = cv2.remap(depth, *rectify, cv2.INTER_NEAREST)
-            return rgb, depth, color.get_frame_number(), color.get_timestamp()
+    with ExitStack() as stack:
+        preview = PreviewWindow() if args.show else None
+        if preview:
+            stack.callback(preview.close)
+        camera = stack.enter_context(open_d415(args.serial, args.stream_width, args.stream_height))
+        K, read_frame = camera.K, camera.read_frame
+        print(json.dumps(camera.metadata), flush=True)
 
         def draw_pose(bgr_frame, cad_pose, target_pose):
             boxed = draw_posed_3d_box(K, bgr_frame, cad_pose, mesh.bounds)
@@ -269,18 +260,18 @@ def main():
         def seek_pose():
             nonlocal registration_not_before
             deadline = float("inf") if preview else time.monotonic() + 25
-            status = "Aim at the socket"
+            status = "Aim at the target"
             while time.monotonic() < deadline:
                 started = time.perf_counter()
                 rgb, depth, number, timestamp = read_frame()
                 bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
-                detection = detect_socket(detector, bgr)
+                detection = detector.predict(bgr)
                 if detection is None or not box_in_view(detection[0], bgr.shape):
-                    status = "Aim at the socket" if detection is None else "Socket clipped | Move it fully into view"
+                    status = "Aim at the target" if detection is None else "Target clipped | Move it fully into view"
                     if preview and not preview.present(bgr, f"{status} | Q or Esc to quit"):
                         return None
                     continue
-                box, confidence = detection
+                box, confidence, mask = detection
                 now = time.monotonic()
                 if last_confirmed_pose_last is not None and now < registration_not_before:
                     estimator.pose_last = last_confirmed_pose_last.clone()
@@ -294,40 +285,49 @@ def main():
                                           "backend": "last_confirmed_pose"}), flush=True)
                         return (recovered, rgb, depth, bgr, bgr, number, timestamp,
                                 elapsed, validation, "recover")
-                    status = "Recovering from last confirmed pose | No SAM2"
+                    status = "Recovering from last confirmed pose"
                     if preview and not preview.present(bgr, status):
                         return None
                     continue
                 if now < registration_not_before:
-                    status = "Waiting before registration retry | No SAM2"
+                    status = "Waiting before registration retry"
                     if preview and not preview.present(bgr, status):
                         return None
                     continue
                 registration_not_before = time.monotonic() + REGISTRATION_RETRY_S
                 init_scale = min(1.0, args.init_width / rgb.shape[1])
-                init_height = round(rgb.shape[0] * init_scale)
+                init_height = max(1, round(rgb.shape[0] * init_scale))
                 init_width = round(rgb.shape[1] * init_scale)
                 init_rgb = cv2.resize(rgb, (init_width, init_height), interpolation=cv2.INTER_LINEAR)
                 init_depth = cv2.resize(depth, (init_width, init_height), interpolation=cv2.INTER_NEAREST)
                 init_K = K.copy()
-                init_K[0] *= init_scale
-                init_K[1] *= init_scale
-                init_box = box * init_scale
-                with torch.inference_mode():
-                    segmenter.set_image(init_rgb)
-                    masks, scores, _ = segmenter.predict(box=init_box, multimask_output=False)
-                    segmenter.reset_predictor()
-                init_mask = masks[0].astype(bool)
+                sx, sy = init_width / rgb.shape[1], init_height / rgb.shape[0]
+                init_K[0] *= sx
+                init_K[1] *= sy
+                mask_info = {"mask_backend": args.mask_backend}
+                if mask is not None:
+                    init_mask = cv2.resize(mask.astype(np.uint8), (init_width, init_height),
+                                           interpolation=cv2.INTER_NEAREST).astype(bool)
+                else:
+                    init_box = box * [sx, sy, sx, sy]
+                    with torch.inference_mode():
+                        segmenter.set_image(init_rgb)
+                        try:
+                            masks, scores, _ = segmenter.predict(box=init_box, multimask_output=False)
+                        finally:
+                            segmenter.reset_predictor()
+                    init_mask = masks[0].astype(bool)
+                    mask_info["sam2_score"] = float(scores[0])
                 ys, xs = np.nonzero(init_mask)
                 if (len(xs) < 128 or np.count_nonzero(init_depth[init_mask] > 0)
                         < max(128, len(xs) // 10)):
-                    status = "Insufficient aligned depth in SAM2 mask"
+                    status = "Insufficient aligned depth in target mask"
                     if preview and not preview.present(bgr, status):
                         return None
                     continue
                 mask_box = np.array([xs.min(), ys.min(), xs.max() + 1, ys.max() + 1])
                 if not box_in_view(mask_box, init_rgb.shape, margin=1):
-                    status = "SAM2 mask clipped | Move socket fully into view"
+                    status = "Target mask clipped | Move target fully into view"
                     if preview and not preview.present(bgr, status):
                         return None
                     continue
@@ -339,7 +339,7 @@ def main():
                 x0, y0, x1, y1 = np.rint(box).astype(int)
                 cv2.rectangle(overlay, (x0, y0), (x1, y1), (0, 200, 255), 2)
                 cv2.imwrite(str(args.output / "candidate_mask.jpg"), overlay)
-                if preview and not preview.present(overlay, "SAM2 mask | Initializing FoundationPose"):
+                if preview and not preview.present(overlay, "Target mask | Initializing FoundationPose"):
                     return None
                 started = time.perf_counter()
                 initial = estimator.register(K=init_K, rgb=init_rgb, depth=init_depth,
@@ -353,12 +353,12 @@ def main():
                     print(json.dumps({"event": "registration_rejected", "validation": validation}), flush=True)
                     continue
                 print(json.dumps({"event": "registration_accepted", "frame": number,
-                                  "detector_confidence": confidence, "sam2_score": float(scores[0]),
+                                  "detector_confidence": confidence, **mask_info,
                                   "validation": validation, "register_ms": elapsed}), flush=True)
                 return (initial, rgb, depth, bgr, overlay, number, timestamp,
                         elapsed, validation, "register")
             cv2.imwrite(str(args.output / "camera.jpg"), bgr)
-            print(f"No aligned charging socket pose before timeout: {status}", flush=True)
+            print(f"No aligned target pose before timeout: {status}", flush=True)
             return None
 
         for _ in range(12):
@@ -410,7 +410,7 @@ def main():
                         sudden_change = (translation_change > MAX_REVIEW_TRANSLATION_M
                                          or rotation_change > MAX_REVIEW_ROTATION_DEG)
                         if projection is None or sudden_change or started >= next_check_at:
-                            detection = detect_socket(detector, bgr)
+                            detection = detector.predict(bgr)
                             detection_box = detection[0] if detection and box_in_view(detection[0], bgr.shape) else None
                             validation = validate_pose(pose, detection_box, depth)
                             checks += 1
@@ -472,8 +472,11 @@ def main():
             image = draw_pose(*last_overlay)
         if image is not None:
             cv2.imwrite(str(args.output / "last_pose.jpg"), image)
-        summary = {"camera_serial": serial, "resolution": [intr.width, intr.height],
-                   "requested_stream_fps": 30, "initialization_mask": "SAM2.1_hiera_small",
+        summary = {"camera_serial": camera.metadata["serial"],
+                   "resolution": camera.metadata["rgb_resolution"],
+                   "requested_stream_fps": 30,
+                   "initialization_mask": "SAM2.1_hiera_small" if segmenter else "yolo-seg",
+                   "class_id": args.class_id, "mesh_units": args.mesh_units,
                    "est_refine_iter": args.est_refine_iter,
                    "register_ms": init_ms, "registrations": registrations, "tracked_poses": tracked_poses,
                    "tracking_checks": checks, "tracking_recoveries": recoveries, "tracking_resets": resets,
@@ -486,12 +489,6 @@ def main():
                    "calibration_independently_validated": False, "pose_accuracy_validated": False}
         (args.output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
         print(json.dumps(summary, ensure_ascii=False), flush=True)
-    finally:
-        try:
-            pipeline.stop()
-        finally:
-            if preview:
-                preview.close()
 
 
 if __name__ == "__main__":
