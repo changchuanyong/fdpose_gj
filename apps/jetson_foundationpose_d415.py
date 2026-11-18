@@ -1,4 +1,4 @@
-"""Track a configured part with live D415 RGB-D and FoundationPose on Jetson."""
+"""Track a configured part with live RGB-D and FoundationPose on Jetson."""
 
 import argparse
 from collections import deque
@@ -74,12 +74,13 @@ def box_iou(a, b):
 class PreviewWindow:
     """Show FoundationPose overlays on the Jetson desktop."""
 
-    def __init__(self):
+    def __init__(self, camera_name):
         import tkinter as tk
         from PIL import Image, ImageTk
 
         self.root = tk.Tk()
-        self.root.title("FoundationPose D415")
+        self.title = f"FoundationPose | {camera_name}"
+        self.root.title(self.title)
         self.label = tk.Label(self.root)
         self.label.pack()
         self.closed = False
@@ -93,7 +94,7 @@ class PreviewWindow:
         self.closed = True
 
     def present(self, bgr, status):
-        self.root.title(f"FoundationPose D415 | {status}")
+        self.root.title(f"{self.title} | {status}")
         rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
         self.photo = self.photo_image(self.image.fromarray(rgb))
         self.label.configure(image=self.photo)
@@ -114,11 +115,13 @@ def parse_args(argv=None):
     parser.add_argument("--class-id", type=int, default=0, help="Target class ID in YOLO weights")
     parser.add_argument("--mask-backend", choices=("sam2", "yolo-seg"), default="sam2")
     parser.add_argument("--sam2-checkpoint", type=Path, default=ROOT / "weights/sam2.1_hiera_small.pt")
-    parser.add_argument("--serial", required=True, help="RealSense SDK serial")
+    parser.add_argument("--camera", choices=("d415", "orbbec-ros"), default="d415")
+    parser.add_argument("--camera-namespace", default="/gemini", help="ROS 2 namespace for Orbbec")
+    parser.add_argument("--serial", required=True, help="Expected camera serial number")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--frames", type=int, default=60, help="Tracking frames after initialization, 0 for continuous")
-    parser.add_argument("--stream-width", type=int, default=640)
-    parser.add_argument("--stream-height", type=int, default=480)
+    parser.add_argument("--stream-width", type=int, default=640, help="D415 stream width")
+    parser.add_argument("--stream-height", type=int, default=480, help="D415 stream height")
     parser.add_argument("--init-width", type=int, default=640,
                         help="Downscale RGB, depth and mask for registration to this width")
     parser.add_argument("--est-refine-iter", type=int, default=3,
@@ -178,10 +181,15 @@ def main():
     estimator = FoundationPose(model_pts=mesh.vertices, model_normals=mesh.vertex_normals,
                                mesh=mesh, debug=0, debug_dir=str(args.output))
     with ExitStack() as stack:
-        preview = PreviewWindow() if args.show else None
+        if args.camera == "orbbec-ros":
+            from orbbec_ros_camera import open_orbbec_ros
+
+            camera = stack.enter_context(open_orbbec_ros(args.serial, args.camera_namespace))
+        else:
+            camera = stack.enter_context(open_d415(args.serial, args.stream_width, args.stream_height))
+        preview = PreviewWindow(camera.metadata["camera"]) if args.show else None
         if preview:
             stack.callback(preview.close)
-        camera = stack.enter_context(open_d415(args.serial, args.stream_width, args.stream_height))
         K, read_frame = camera.K, camera.read_frame
         print(json.dumps(camera.metadata), flush=True)
 
@@ -472,9 +480,10 @@ def main():
             image = draw_pose(*last_overlay)
         if image is not None:
             cv2.imwrite(str(args.output / "last_pose.jpg"), image)
-        summary = {"camera_serial": camera.metadata["serial"],
+        summary = {"camera_serial": camera.metadata["serial"], "camera_backend": args.camera,
+                   "camera_metadata": camera.metadata,
                    "resolution": camera.metadata["rgb_resolution"],
-                   "requested_stream_fps": 30,
+                   "requested_stream_fps": 30 if args.camera == "d415" else None,
                    "initialization_mask": "SAM2.1_hiera_small" if segmenter else "yolo-seg",
                    "class_id": args.class_id, "mesh_units": args.mesh_units,
                    "est_refine_iter": args.est_refine_iter,

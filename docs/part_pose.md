@@ -40,8 +40,41 @@ bash scripts/run_d415.sh \
 
 切换到 `--mask-backend sam2` 时使用该零件的 YOLO **检测**权重，并准备 SAM2.1 checkpoint。也可用 `--sam2-checkpoint` 指定自定义路径。初次接入时查看输出目录的 `initial_mask.jpg`、位姿叠加图和 `summary.json`。`poses.jsonl` 的 `T_camera_target_m` 表示目标坐标系到相机光学坐标系的变换，平移单位为米。
 
-## 后续接入 Gemini 335L
+## 启动 Gemini 335L / 336L（Jetson）
 
-[相机模块](../apps/rgbd_camera.py) 定义实时取流接口。适配器提供与 RGB 像素对应的内参 `K`、设备元数据，并按帧返回 RGB8、对齐到彩色的米制深度、帧号和毫秒时间戳。可以从[现有 Orbbec 采集脚本](../scripts/pipeline/orbbec_capture.py) 复用同步取流、彩色解码和对齐处理。
+两款相机共用 [Orbbec ROS 2 适配器](../apps/orbbec_ros_camera.py)，D415 启动不变。Jetson 需要已有的 ROS 2 Humble 与 Orbbec ROS 驱动工作区；此路径**不依赖** `pyorbbecsdk`。录制重建数据的 [Orbbec SDK 采集脚本](../scripts/pipeline/orbbec_capture.py) 是另一条路径。
 
-切换默认相机前，在部署设备上检查 335L 实际使用的彩色内参、RGB 与深度的对齐、已知距离的深度读数，以及同一零件的注册和跟踪恢复。当前实时入口为 D415，Gemini 335L 实时适配待接入。
+在两个 Jetson 终端分别执行以下环境初始化。将工作区路径和序列号替换成实际值；两个终端的 ROS 域与序列号保持一致。
+
+```bash
+source /opt/ros/humble/setup.bash
+source ~/HKR_WorkSpace/ros2_ws/install/local_setup.bash
+export ROS_DOMAIN_ID=117 ROS_LOCALHOST_ONLY=1
+read -r -p 'Gemini serial: ' SERIAL
+```
+
+终端一运行相机节点，开启帧同步和深度到彩色的软件对齐：
+
+```bash
+ros2 launch orbbec_camera gemini_330_series.launch.py \
+  camera_name:=gemini serial_number:="$SERIAL" \
+  color_width:=640 color_height:=480 color_fps:=30 \
+  depth_width:=640 depth_height:=400 depth_fps:=30 \
+  depth_registration:=true align_mode:=SW enable_frame_sync:=true \
+  frame_aggregate_mode:=full_frame enable_depth_scale:=true \
+  publish_tf:=false trigger_out_enabled:=false
+```
+
+终端二在 `fdpose` 仓库根目录启动位姿程序。将示例的三个零件文件路径替换为实际路径。`--show` 仅在 Jetson 桌面终端有显示服务时使用。
+
+```bash
+~/venvs/ev-charging-d415-gpu/bin/python -u -B apps/jetson_foundationpose_d415.py \
+  --camera orbbec-ros --camera-namespace /gemini --serial "$SERIAL" \
+  --mask-backend yolo-seg --weights weights/part-seg.pt --class-id 0 \
+  --mesh assets/mesh/part.PLY --geometry config/geometry/part.json \
+  --output "artifacts/gemini-live-$(date +%Y%m%d-%H%M%S)" --frames 60
+```
+
+适配器查询并核对实际型号和序列号，匹配 15 ms 内的 RGB-D 帧，检查对齐后的分辨率、光学坐标系和内参。驱动已经按设备的深度比例把 `16UC1` 转为毫米，适配器再换算成米，并用同一去畸变映射处理彩色和深度。位姿程序退出后，在相机终端按 Ctrl+C 停止驱动。
+
+2026-11-18 在 Jetson 上用本适配器读取了 Gemini 336L 的 10 组配对帧。输入为 640×480 彩色及 640×400 原始深度，对齐后均为 640×480。设备身份、帧号与时间戳递增、米制深度输出均通过检查；日志与摘要位于 Jetson 的 `~/fdonpose/artifacts/gemini336l-adapter-20261118-165712/`。335L 需按实际流配置验证，两款相机的内参不共用。此次仅验证相机到适配器，不涉及已知距离的深度校验、FoundationPose 实物位姿或长期稳定性。

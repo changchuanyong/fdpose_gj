@@ -10,7 +10,7 @@ import numpy as np
 
 @dataclass
 class RGBDStream:
-    """K in RGB pixels; read_frame returns RGB8, aligned depth in meters, frame ID, device ms."""
+    """K in RGB pixels; read_frame returns RGB8, aligned depth in meters, frame counter, timestamp ms."""
 
     K: np.ndarray
     metadata: dict

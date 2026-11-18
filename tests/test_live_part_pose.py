@@ -15,6 +15,7 @@ except ModuleNotFoundError:
 if np is not None:
     with patch.object(sys, "path", [str(Path(__file__).resolve().parents[1] / "apps"), *sys.path]):
         from jetson_foundationpose_d415 import load_cad_from_target, parse_args
+        from orbbec_ros_camera import PairBuffer, aligned_calibration, decode_pair, stamp_ns
         from rgbd_camera import open_d415
         from target_segmentation import TargetDetector, select_target
 
@@ -150,3 +151,50 @@ class LivePartPoseTest(unittest.TestCase):
                     stream.read_frame()
         rs.align.assert_called_once_with(rs.stream.color)
         pipeline.stop.assert_called_once_with()
+
+    def test_orbbec_depth_decodes_millimeters_to_meters_and_checks_alignment(self):
+        rgb = np.arange(18, dtype=np.uint8).reshape(2, 3, 3)
+        z = np.array([[400, 0, 600], [700, 800, 900]], dtype="<u2")
+        color_msg = SimpleNamespace(encoding="rgb8", width=3, height=2, step=9,
+                                    data=rgb.tobytes(), is_bigendian=False)
+        depth_msg = SimpleNamespace(encoding="16UC1", width=3, height=2, step=6,
+                                    data=z.tobytes(), is_bigendian=False)
+        decoded_rgb, decoded_depth = decode_pair(color_msg, depth_msg)
+        np.testing.assert_array_equal(decoded_rgb, rgb)
+        np.testing.assert_allclose(decoded_depth, z.astype(np.float32) / 1000)
+
+        K = np.array([[4, 0, 1], [0, 5, 0.5], [0, 0, 1]], dtype=float)
+        frame = "gemini_color_optical_frame"
+        color = SimpleNamespace(width=3, height=2, header=SimpleNamespace(frame_id=frame))
+        depth = SimpleNamespace(width=3, height=2, header=SimpleNamespace(frame_id=frame))
+        info = SimpleNamespace(width=3, height=2, header=SimpleNamespace(frame_id=frame),
+                               k=K.ravel().tolist(), d=[0] * 8,
+                               distortion_model="rational_polynomial")
+        result, _ = aligned_calibration(color, depth, info, info)
+        np.testing.assert_array_equal(result, K)
+        depth.header.frame_id = "gemini_depth_optical_frame"
+        with self.assertRaisesRegex(RuntimeError, "registered to the color"):
+            aligned_calibration(color, depth, info, info)
+
+    def test_orbbec_pair_buffer_matches_nearby_monotonic_frames(self):
+        def msg(milliseconds, extra_ns=0):
+            nanoseconds = milliseconds * 1_000_000 + extra_ns
+            return SimpleNamespace(header=SimpleNamespace(
+                stamp=SimpleNamespace(sec=nanoseconds // 1_000_000_000,
+                                      nanosec=nanoseconds % 1_000_000_000)))
+
+        color_info = object()
+        depth_info = object()
+        buffer = PairBuffer()
+        buffer.infos = {"color": color_info, "depth": depth_info}
+        color, depth = msg(100), msg(100, 10_000)
+        buffer.images = {"color": color, "depth": depth}
+        pair = buffer.pop()
+        self.assertEqual((color, depth, color_info, depth_info), pair)
+        self.assertAlmostEqual(100.01, stamp_ns(pair[1]) / 1e6)
+
+        buffer.images = {"color": msg(200), "depth": msg(216)}
+        self.assertIsNone(buffer.pop())
+        self.assertIn("depth", buffer.images)
+        buffer.images = {"color": msg(100), "depth": msg(100)}
+        self.assertIsNone(buffer.pop())

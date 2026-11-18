@@ -23,7 +23,7 @@ bash ~/fdonpose/scripts/run_d415.sh
 
 如果 `FileNotFoundError` 指向 `~/ev-charging-d415/`，请改用上面的启动脚本。YOLO 权重位于 `~/fdonpose/weights/best.pt`，SAM2 权重位于 `~/fdonpose/weights/sam2.1_hiera_small.pt`。
 
-默认使用 YOLO 检测加 SAM2。已有零件分割权重时，追加 `--mask-backend yolo-seg --weights <分割权重>`。更换目标和后续接入 Gemini 335L 见[零件接入指南](docs/part_pose.md)。
+默认使用 YOLO 检测加 SAM2。已有零件分割权重时，追加 `--mask-backend yolo-seg --weights <分割权重>`。更换目标或使用 Gemini 335L / 336L 见[零件接入指南](docs/part_pose.md)。
 
 ## 运行与输出
 
