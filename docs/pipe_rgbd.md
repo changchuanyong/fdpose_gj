@@ -1,8 +1,8 @@
 # 335L 管件 RGB-D 采集与重建使用说明
 
-本文面向当前无 CAD 的 PVC-U 弯头，使用奥比中光 Gemini 335L 采集多角度 RGB-D，再生成 FoundationPose 使用的 PLY 网格。
+本文面向当前无 CAD 的 PVC-U 弯头，使用奥比中光 Gemini 335L 采集多角度 RGB-D，再生成 FoundationPose 使用的 PLY 网格。也可改用 RealSense D415 采集（见第三节第 5 小节），重建流程相同。
 
-> 当前状态：采集和重建代码已完成离线检查，但尚未连接 335L，也没有用实物数据验证重建精度。现阶段先完成环境检查和样例采集，不代表已经获得可用模型。
+> 当前状态：采集和重建代码已完成离线检查，但 335L 与 D415 采集脚本均尚未连接相机真机运行，也没有用实物数据验证重建精度。现阶段先完成环境检查和样例采集，不代表已经获得可用模型。
 
 ## 一、使用流程
 
@@ -111,6 +111,23 @@ artifacts/elbow-rgbd-001/
 
 深度比例从设备帧读取，不假定 1 个深度单位一定是 1 mm。深度 PNG 是原始 16 位数据，普通看图软件显示很暗或接近黑色不一定是异常；同时检查终端输出的 `valid_depth_pixels` 和 RGB／深度轮廓是否对齐。
 
+### 5. 改用 RealSense D415 采集
+
+没有 335L 时可以用 RealSense D415 采集，输出目录格式与上面完全一致，后续掩膜和重建步骤不变。依赖 `pyrealsense2`（仓库实时位姿程序已在用），取流方式与 `apps/jetson_foundationpose_d415.py` 一致：彩色 rgb8、深度 z16、`rs.align` 对齐到彩色、brown_conrady 去畸变。
+
+```bash
+python scripts/pipeline/realsense_capture.py \
+  --output artifacts/elbow-rgbd-d415-001 \
+  --frames 100 \
+  --interval-s 0.2
+```
+
+默认彩色 640×480、深度 640×480、30 fps，可用 `--color-width`、`--color-height`、`--depth-width`、`--depth-height`、`--fps` 调整；多相机环境用 `--serial <序列号>` 指定设备。注意：
+
+- D415 的最小深度距离较远（以官方数据手册为准），拍小管件不能凑得太近，否则深度无效；先采 10 帧样例确认 `valid_depth_pixels` 充足。
+- 白色反光表面的深度空洞问题与 335L 相同，调整拍摄角度和照明后重拍。
+- 该脚本同样尚未真机验证。
+
 ## 四、生成管件掩膜
 
 在采集目录下建立 `masks/`，为每个用于重建的帧准备同名黑白 PNG：
@@ -129,6 +146,17 @@ artifacts/elbow-rgbd-001/masks/
 - 承口边缘尽量准确，不要把背景并入管件。
 - 可使用图像标注工具或 SAM2 辅助生成，但需要人工抽查。
 
+SAM2 视频传播可批量生成：选一帧管件尽量完整的帧给框提示，向前向后传播整段序列（需要 CUDA 与 `weights/sam2.1_hiera_small.pt`）：
+
+```bash
+python scripts/pipeline/make_masks_sam2.py \
+  --capture artifacts/elbow-rgbd-001 \
+  --output artifacts/elbow-rgbd-001/masks \
+  --prompt-frame 250 --box 240 210 437 479
+```
+
+`--box` 为提示帧上管件的外接框 `x0 y0 x1 y1`；手持或移动管件的尾段用 `--max-frames` 截掉。生成后必须目视抽查掩膜（管件白、背景黑），确认承口边缘无误再重建。
+
 掩膜只控制融合进模型的区域；采集时必须保留完整场景，不能只保存掩膜内的 RGB-D。
 
 ## 五、重建三维网格
@@ -145,7 +173,7 @@ python scripts/pipeline/reconstruct_rgbd.py \
 - `assets/mesh/elbow_dn50.PLY`：三维网格，单位为**毫米**，坐标系暂时是第一帧相机坐标系。
 - `assets/mesh/elbow_dn50.json`：融合帧数、配准失败帧、深度比例和网格包围盒。
 
-程序对相邻完整 RGB-D 帧做里程计，再将掩膜内的管件深度融合为 TSDF 网格。默认 1.5 mm 体素只是 dn50 管件的初始参数，不代表重建精度。
+程序对相邻完整 RGB-D 帧做里程计，再将掩膜内的管件深度融合为 TSDF 网格。默认 1.5 mm 体素只是 dn50 管件的初始参数，不代表重建精度。Open3D 0.20 的 ScalableTSDFVolume 有深度缩放回归（融合结果为空网格），脚本改用首帧管件中心居中的 UniformTSDFVolume；`--volume-length-m` 设定积分立方体边长（默认 1 m），分辨率由体素尺寸导出。每步里程计另用掩膜点云对齐残差校验（`--odometry-max-residual-mm`，默认 10 mm），超差即跳帧并保留前一锚点。手持采集必须慢到相邻帧无运动模糊（建议 ≤0.1 m/s、整段 20–30 s 以上）：快动会同时造成深度大面积缺失与里程计崩溃，残差门控会拒掉绝大多数帧，可用帧不足则重建失败。
 
 如果大量出现 `rgbd_odometry_failed`，重新采集时降低移动速度、增加相邻视角重叠，并保留有纹理的静止背景。如果网格包含背景或内壁破洞，先修正掩膜和原始深度，不要只靠网格平滑掩盖问题。
 

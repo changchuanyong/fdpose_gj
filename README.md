@@ -4,13 +4,15 @@
 
 ## 快速启动
 
-在已部署的 Jetson 上接好 D415 和显示器，在桌面终端运行下面的命令。首次部署见 [Jetson 安装与验证](docs/jetson_setup.md)。
+在已部署的 Jetson 上接好 D415 或 Gemini 336L 和显示器，在桌面终端运行对应命令。首次部署见 [Jetson 安装与验证](docs/jetson_setup.md)。
+
+### RealSense D415
 
 ```bash
 bash ~/fdonpose/scripts/run_d415.sh
 ```
 
-[启动脚本](scripts/run_d415.sh) 默认使用这台 D415 的 SDK 序列号 `349222063070`，从项目目录读取模型、坐标配置和权重，并打开桌面窗口持续跟踪。按 **Q** 或 **Esc** 退出。
+[D415 启动脚本](scripts/run_d415.sh) 默认使用这台 D415 的 SDK 序列号 `349222063070`，从项目目录读取模型、坐标配置和权重，并打开桌面窗口持续跟踪。按 **Q** 或 **Esc** 退出。
 
 | 用途 | 参数 |
 | --- | --- |
@@ -23,13 +25,21 @@ bash ~/fdonpose/scripts/run_d415.sh
 
 如果 `FileNotFoundError` 指向 `~/ev-charging-d415/`，请改用上面的启动脚本。YOLO 权重位于 `~/fdonpose/weights/best.pt`，SAM2 权重位于 `~/fdonpose/weights/sam2.1_hiera_small.pt`。
 
-默认使用 YOLO 检测加 SAM2。已有零件分割权重时，追加 `--mask-backend yolo-seg --weights <分割权重>`。更换目标或使用 Gemini 335L / 336L 见[零件接入指南](docs/part_pose.md)。
+### Gemini 336L / 335L
+
+```bash
+bash ~/fdonpose/scripts/run_330s.sh
+```
+
+[Gemini 启动脚本](scripts/run_330s.sh) 需要已部署的 ROS 2 Humble、`~/HKR_WorkSpace/ros2_ws` Orbbec 驱动工作区和项目 Python 环境。脚本启动相机，等待设备服务就绪，再打开桌面窗口持续跟踪。默认使用 336L 序列号 `CPCD7530009J`；换用 335L 或其他 336L 时，在命令前设置 `ORBBEC_SERIAL`。按 **Q** 或 **Esc** 退出，脚本会停止相机驱动。
+
+两个脚本默认使用 YOLO 检测加 SAM2，并支持追加位姿参数。已有零件分割权重时，追加 `--mask-backend yolo-seg --weights <分割权重>`。更换零件网格、坐标配置，或手动启动 Orbbec 驱动，见[零件接入指南](docs/part_pose.md)。
 
 ## 运行与输出
 
 应用将深度对齐到彩色画面。首帧初始化后，FoundationPose 每帧精化 2 轮，窗口显示 3D 框和 XYZ 坐标轴。首个跟踪帧、之后约每 0.6 秒以及姿态突变时，都会核对投影、检测框和模型表面深度。只有完整复核通过的位姿才用于恢复缓存。失配时窗口撤掉位姿框，先尝试从最后确认位姿恢复，失败后重新检测、分割并注册。
 
-结果保存在 `artifacts/d415-live-*`。网格 `socket_mod.PLY` 与 `config/geometry/socket_openings_ply.json` 配套使用，后者定义从网格坐标到充电口目标坐标的变换。
+D415 结果保存在 `artifacts/d415-live-*`，Gemini 结果保存在 `artifacts/gemini-330s-*/poses/`，相机节点日志在同次运行目录的 `camera.log`。网格 `socket_mod.PLY` 与 `config/geometry/socket_openings_ply.json` 配套使用，后者定义从网格坐标到充电口目标坐标的变换。
 
 | 文件 | 内容 |
 | --- | --- |
@@ -55,7 +65,7 @@ bash ~/fdonpose/scripts/run_d415.sh
 
 - [Jetson 安装与验证](docs/jetson_setup.md) · 从零部署、固定版本、平台问题和官方样例复现
 - [充电口离线回放](docs/charging_replay.md) · 从 `robot-ev-charging` 数据记录运行 YOLO、SAM2 和 FoundationPose
-- [管件 RGB-D 重建](docs/pipe_rgbd.md) · 奥比中光 335L 采集、网格重建与接入条件（尚未真机验证）
+- [管件 RGB-D 重建](docs/pipe_rgbd.md) · 奥比中光 335L / RealSense D415 采集、网格重建与接入条件（尚未真机验证）
 - [标定板 v2](docs/tag_mount.md) · 双 M6 螺栓安装、两孔试装件和打印说明
 - [Windows 原生验证归档](docs/env/windows-validation-20261105.md) · 历史环境、验证数据和编译排障
 - [文档索引](docs/index.md) · [上游归属与许可](NOTICE.md)

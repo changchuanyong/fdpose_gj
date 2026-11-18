@@ -32,6 +32,27 @@ def masked_depth(depth: np.ndarray, mask: np.ndarray, min_depth_m: float,
     return selected
 
 
+def depth_points(depth: np.ndarray, matrix: np.ndarray, depth_scale_m: float,
+                 stride: int = 8) -> np.ndarray:
+    sub = depth[::stride, ::stride]
+    ys, xs = np.nonzero(sub)
+    z = sub[ys, xs].astype(float) * depth_scale_m
+    return np.stack([
+        (xs * stride - matrix[0, 2]) * z / matrix[0, 0],
+        (ys * stride - matrix[1, 2]) * z / matrix[1, 1],
+        z,
+    ], axis=1)
+
+
+def object_center(depth: np.ndarray, matrix: np.ndarray, depth_scale_m: float) -> np.ndarray:
+    return np.median(depth_points(depth, matrix, depth_scale_m, stride=4), axis=0)
+
+
+def mean_nearest_distance(query: np.ndarray, reference: np.ndarray) -> float:
+    d = np.sqrt(((query[:, None, :] - reference[None, :, :]) ** 2).sum(-1)).min(axis=1)
+    return float(d.mean())
+
+
 def reconstruct(args: argparse.Namespace) -> int:
     try:
         import cv2
@@ -58,15 +79,13 @@ def reconstruct(args: argparse.Namespace) -> int:
         width, height, matrix[0, 0], matrix[1, 1], matrix[0, 2], matrix[1, 2],
     )
     option = o3d.pipelines.odometry.OdometryOption()
-    option.max_depth_diff = args.odometry_max_depth_diff
+    option.depth_diff_max = args.odometry_max_depth_diff
     jacobian = o3d.pipelines.odometry.RGBDOdometryJacobianFromHybridTerm()
-    volume = o3d.pipelines.integration.ScalableTSDFVolume(
-        voxel_length=args.voxel_mm / 1000.0,
-        sdf_trunc=args.sdf_trunc_mm / 1000.0,
-        color_type=o3d.pipelines.integration.TSDFVolumeColorType.RGB8,
-    )
+    resolution = max(2, int(round(args.volume_length_m * 1000.0 / args.voxel_mm)))
+    volume = None
 
     previous = None
+    previous_selected = None
     first_from_previous = np.eye(4)
     pose_records = []
     integrated = 0
@@ -74,11 +93,27 @@ def reconstruct(args: argparse.Namespace) -> int:
         rgb, raw_depth = read_rgbd(root, record, width, height)
         mask_path = args.mask_dir / f"{record['index']:06d}_mask.png"
         mask = read_png(mask_path, cv2.IMREAD_GRAYSCALE)
-        if mask.shape != (height, width):
-            raise ValueError(f"mask dimensions do not match frame {record['index']}: {mask_path}")
-        selected_depth = masked_depth(
-            raw_depth, mask, args.min_depth_m, args.max_depth_m, scale_m,
-        )
+        try:
+            if mask.shape != (height, width):
+                raise ValueError(f"mask dimensions do not match frame {record['index']}: {mask_path}")
+            selected_depth = masked_depth(
+                raw_depth, mask, args.min_depth_m, args.max_depth_m, scale_m,
+            )
+        except ValueError as exc:
+            pose_records.append({"index": record["index"], "integrated": False,
+                                 "reason": f"object_depth_rejected: {exc}"})
+            print(json.dumps(pose_records[-1]), flush=True)
+            continue
+        if volume is None:
+            # open3d 0.20 ScalableTSDFVolume mis-scales metric depth and yields an empty mesh.
+            volume = o3d.pipelines.integration.UniformTSDFVolume(
+                length=args.volume_length_m,
+                resolution=resolution,
+                sdf_trunc=args.sdf_trunc_mm / 1000.0,
+                color_type=o3d.pipelines.integration.TSDFVolumeColorType.RGB8,
+                origin=object_center(selected_depth, matrix, scale_m)
+                - args.volume_length_m / 2,
+            )
         full_rgbd = make_rgbd(o3d, rgb, raw_depth, scale_m, args.max_depth_m)
         object_rgbd = make_rgbd(o3d, rgb, selected_depth, scale_m, args.max_depth_m)
         if previous is not None:
@@ -92,9 +127,20 @@ def reconstruct(args: argparse.Namespace) -> int:
                                      "reason": "rgbd_odometry_failed"})
                 print(json.dumps(pose_records[-1]), flush=True)
                 continue
+            moved = depth_points(selected_depth, matrix, scale_m)
+            moved = moved @ previous_from_current[:3, :3].T + previous_from_current[:3, 3]
+            residual_m = mean_nearest_distance(
+                moved, depth_points(previous_selected, matrix, scale_m))
+            if residual_m > args.odometry_max_residual_mm / 1000.0:
+                pose_records.append({"index": record["index"], "integrated": False,
+                                     "reason": "rgbd_odometry_residual_rejected: "
+                                               f"{residual_m * 1000:.1f}mm"})
+                print(json.dumps(pose_records[-1]), flush=True)
+                continue
             first_from_previous = first_from_previous @ previous_from_current
         volume.integrate(object_rgbd, intrinsic, np.linalg.inv(first_from_previous))
         previous = full_rgbd
+        previous_selected = selected_depth
         integrated += 1
         pose_records.append({
             "index": record["index"],
@@ -128,6 +174,9 @@ def reconstruct(args: argparse.Namespace) -> int:
         "integrated_frames": integrated,
         "voxel_mm": args.voxel_mm,
         "sdf_trunc_mm": args.sdf_trunc_mm,
+        "volume_length_m": args.volume_length_m,
+        "volume_resolution": resolution,
+        "odometry_max_residual_mm": args.odometry_max_residual_mm,
         "depth_scale_m": scale_m,
         "mesh_bounds_m_before_export": bounds_m,
         "geometry_validated": False,
@@ -147,17 +196,23 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True, help="Output PLY, exported in millimetres")
     parser.add_argument("--report", type=Path)
     parser.add_argument("--voxel-mm", type=float, default=1.5)
+    parser.add_argument("--volume-length-m", type=float, default=1.0,
+                        help="Edge length of the object-centred integration cube")
     parser.add_argument("--sdf-trunc-mm", type=float, default=6.0)
     parser.add_argument("--min-depth-m", type=float, default=0.15)
     parser.add_argument("--max-depth-m", type=float, default=1.5)
     parser.add_argument("--odometry-max-depth-diff", type=float, default=0.07)
+    parser.add_argument("--odometry-max-residual-mm", type=float, default=10.0,
+                        help="Reject odometry steps whose masked-object alignment residual exceeds this")
     parser.add_argument("--frame-stride", type=int, default=1)
     parser.add_argument("--max-frames", type=int, default=0)
     args = parser.parse_args()
     if args.report is None:
         args.report = args.output.with_suffix(".json")
-    if min(args.voxel_mm, args.sdf_trunc_mm, args.odometry_max_depth_diff) <= 0:
-        parser.error("voxel, SDF truncation and odometry depth difference must be positive")
+    if min(args.voxel_mm, args.sdf_trunc_mm, args.odometry_max_depth_diff,
+           args.volume_length_m, args.odometry_max_residual_mm) <= 0:
+        parser.error("voxel, SDF truncation, odometry depth difference, volume length "
+                     "and odometry residual must be positive")
     if not 0 <= args.min_depth_m < args.max_depth_m:
         parser.error("depth range must satisfy 0 <= min < max")
     if args.frame_stride <= 0 or args.max_frames < 0:
