@@ -13,10 +13,10 @@ serial="${ORBBEC_SERIAL:-CPCD7530009J}"
 run_dir="artifacts/gemini-330s-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$run_dir"
 
-ros2 launch orbbec_camera gemini_330_series.launch.py \
+setsid ros2 launch orbbec_camera gemini_330_series.launch.py \
   camera_name:=gemini serial_number:="$serial" \
-  color_width:=640 color_height:=480 color_fps:=30 \
-  depth_width:=640 depth_height:=400 depth_fps:=30 \
+  color_width:=1280 color_height:=720 color_fps:=30 \
+  depth_width:=1280 depth_height:=720 depth_fps:=30 \
   depth_registration:=true align_mode:=SW enable_frame_sync:=true \
   frame_aggregate_mode:=full_frame enable_depth_scale:=true \
   publish_tf:=false trigger_out_enabled:=false \
@@ -24,7 +24,12 @@ ros2 launch orbbec_camera gemini_330_series.launch.py \
 camera_pid=$!
 
 stop_camera() {
-  kill "$camera_pid" 2>/dev/null || true
+  kill -INT -- "-$camera_pid" 2>/dev/null || true
+  for ((i=0; i<50; i++)); do
+    kill -0 -- "-$camera_pid" 2>/dev/null || break
+    sleep 0.1
+  done
+  kill -TERM -- "-$camera_pid" 2>/dev/null || true
   wait "$camera_pid" 2>/dev/null || true
 }
 trap stop_camera EXIT
@@ -38,7 +43,8 @@ while (( SECONDS < deadline )); do
     echo "Orbbec camera launch exited; see $run_dir/camera.log" >&2
     exit 1
   fi
-  if timeout 3s ros2 service list 2>/dev/null | grep -Fx /gemini/get_device_info >/dev/null; then
+  if timeout 6s ros2 service list --no-daemon --spin-time 2 2>/dev/null \
+    | grep -Fx /gemini/get_device_info >/dev/null; then
     ready=true
     break
   fi

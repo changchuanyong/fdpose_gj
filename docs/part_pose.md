@@ -58,8 +58,8 @@ read -r -p 'Gemini serial: ' SERIAL
 ```bash
 ros2 launch orbbec_camera gemini_330_series.launch.py \
   camera_name:=gemini serial_number:="$SERIAL" \
-  color_width:=640 color_height:=480 color_fps:=30 \
-  depth_width:=640 depth_height:=400 depth_fps:=30 \
+  color_width:=1280 color_height:=720 color_fps:=30 \
+  depth_width:=1280 depth_height:=720 depth_fps:=30 \
   depth_registration:=true align_mode:=SW enable_frame_sync:=true \
   frame_aggregate_mode:=full_frame enable_depth_scale:=true \
   publish_tf:=false trigger_out_enabled:=false

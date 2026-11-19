@@ -187,10 +187,20 @@ def main():
             camera = stack.enter_context(open_orbbec_ros(args.serial, args.camera_namespace))
         else:
             camera = stack.enter_context(open_d415(args.serial, args.stream_width, args.stream_height))
-        preview = PreviewWindow(camera.metadata["camera"]) if args.show else None
+        live_preview = None
+        if args.show and args.camera == "orbbec-ros":
+            from gemini_preview import GeminiPreview
+            live_preview = GeminiPreview(camera.metadata["camera"])
+        preview = live_preview or (PreviewWindow(camera.metadata["camera"]) if args.show else None)
         if preview:
             stack.callback(preview.close)
-        K, read_frame = camera.K, camera.read_frame
+        K = camera.K
+
+        def read_frame():
+            frame = camera.read_frame()
+            if live_preview:
+                live_preview.source = frame[2:4]
+            return frame
         print(json.dumps(camera.metadata), flush=True)
 
         def draw_pose(bgr_frame, cad_pose, target_pose):
@@ -496,6 +506,8 @@ def main():
                    "position_std_xyz_mm": (np.std(translations, axis=0) * 1000).tolist() if translations else None,
                    "last_position_xyz_m": translations[-1].tolist() if translations else None,
                    "calibration_independently_validated": False, "pose_accuracy_validated": False}
+        if live_preview:
+            summary.update(live_preview.measurements())
         (args.output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
         print(json.dumps(summary, ensure_ascii=False), flush=True)
 
