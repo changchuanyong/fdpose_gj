@@ -3,6 +3,7 @@
 import argparse
 from collections import deque
 from contextlib import ExitStack
+from functools import partial
 from itertools import product
 import json
 import logging
@@ -20,11 +21,18 @@ from rgbd_camera import open_d415
 from target_segmentation import TargetDetector
 
 
-ROOT = Path(__file__).resolve().parents[1]
+CODE_ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(os.environ.get("FDPOSE_ROOT", CODE_ROOT)).resolve()
+sys.path.insert(0, str(CODE_ROOT / "src"))
+from fdonpose.adapters.foundationpose import render_depth
+from fdonpose.adapters.ros2 import PosePublisher
+from fdonpose.application.registration import RejectedMask, prepare_registration
+from fdonpose.application.tracking import TrackingSession
+from fdonpose.application.validation import validate_pose as validate_pose_result
+from fdonpose.domain.geometry import box_in_view, projected_box
+
+
 CHECK_PERIOD_S = 0.6
-MIN_BOX_IOU = 0.35
-RECOVERY_WINDOW_S = 3.0
-REGISTRATION_RETRY_S = 5.0
 
 
 UNIT_TO_M = {"mm": 0.001, "m": 1.0}
@@ -45,30 +53,6 @@ def load_cad_from_target(path):
         raise ValueError(f"cad_to_target must contain a proper rotation: {path}")
     target_from_cad[:3, 3] *= UNIT_TO_M[units]
     return np.linalg.inv(target_from_cad)
-
-
-def box_in_view(box, shape, margin=8):
-    x0, y0, x1, y1 = box
-    height, width = shape[:2]
-    return margin <= x0 < x1 <= width - margin and margin <= y0 < y1 <= height - margin
-
-
-def projected_box(K, corners, pose):
-    points = corners @ pose[:3, :3].T + pose[:3, 3]
-    if not np.isfinite(points).all() or np.any(points[:, 2] <= 0):
-        return None
-    pixels = points @ K.T
-    xy = pixels[:, :2] / pixels[:, 2:]
-    return np.concatenate((xy.min(axis=0), xy.max(axis=0)))
-
-
-def box_iou(a, b):
-    if a is None or b is None:
-        return 0.0
-    overlap = np.maximum(np.minimum(a[2:], b[2:]) - np.maximum(a[:2], b[:2]), 0)
-    intersection = float(np.prod(overlap))
-    union = float(np.prod(a[2:] - a[:2]) + np.prod(b[2:] - b[:2])) - intersection
-    return intersection / union if union > 0 else 0.0
 
 
 class PreviewWindow:
@@ -127,6 +111,7 @@ def parse_args(argv=None):
     parser.add_argument("--est-refine-iter", type=int, default=3,
                         help="Registration refinement iterations")
     parser.add_argument("--show", action="store_true", help="Show live RGB and pose overlays on the Jetson desktop")
+    parser.add_argument("--ros-pose-topic", help="Publish target poses as geometry_msgs/PoseStamped")
     args = parser.parse_args(argv)
     if args.class_id < 0:
         parser.error("--class-id must be nonnegative")
@@ -136,6 +121,8 @@ def parse_args(argv=None):
         parser.error("--stream-width, --stream-height and --init-width must be positive")
     if args.est_refine_iter < 1:
         parser.error("--est-refine-iter must be positive")
+    if args.ros_pose_topic is not None and not args.ros_pose_topic.startswith('/'):
+        parser.error("--ros-pose-topic must be an absolute ROS topic")
     if not (args.foundationpose / "estimater.py").is_file():
         parser.error(f"Project FoundationPose source not found: {args.foundationpose}")
     if args.show and not os.environ.get("DISPLAY"):
@@ -158,7 +145,7 @@ def main():
     os.environ.setdefault("YOLO_CONFIG_DIR", str(args.output.parent / "ultralytics"))
     os.environ.setdefault("FDONPOSE_TMP", str(args.output / "tmp"))
     sys.path.insert(0, str(args.foundationpose.resolve()))
-    from estimater import FoundationPose, draw_posed_3d_box, draw_xyz_axis, nvdiffrast_render, set_seed
+    from estimater import FoundationPose, draw_posed_3d_box, draw_xyz_axis, set_seed
 
     logging.getLogger().setLevel(logging.WARNING)
     set_seed(0)
@@ -180,6 +167,7 @@ def main():
         ))
     estimator = FoundationPose(model_pts=mesh.vertices, model_normals=mesh.vertex_normals,
                                mesh=mesh, debug=0, debug_dir=str(args.output))
+    session = TrackingSession(estimator, torch.cuda.synchronize)
     with ExitStack() as stack:
         if args.camera == "orbbec-ros":
             from orbbec_ros_camera import open_orbbec_ros
@@ -195,9 +183,18 @@ def main():
         if preview:
             stack.callback(preview.close)
         K = camera.K
+        frame_stamp_ns = None
+        pose_publisher = None
+        if args.ros_pose_topic:
+            frame_id = camera.metadata.get("frame_id", "camera_color_optical_frame")
+            pose_publisher = PosePublisher(args.ros_pose_topic, frame_id)
+            stack.callback(pose_publisher.close)
 
         def read_frame():
+            nonlocal frame_stamp_ns
             frame = camera.read_frame()
+            if pose_publisher:
+                frame_stamp_ns = camera.ros_stamp_ns() if camera.ros_stamp_ns else pose_publisher.now_ns()
             if live_preview:
                 live_preview.source = frame[2:4]
             return frame
@@ -222,19 +219,9 @@ def main():
 
         def validate_pose(pose, detection_box, measured_depth, evaluation_K=None):
             evaluation_K = K if evaluation_K is None else evaluation_K
-            iou = box_iou(projected_box(evaluation_K, corners, pose), detection_box)
-            result = {"accepted": False, "alignment_iou": iou}
-            if detection_box is None or iou < MIN_BOX_IOU:
-                return result
-            with torch.inference_mode():
-                _, rendered_depth, _ = nvdiffrast_render(
-                    K=evaluation_K, H=measured_depth.shape[0], W=measured_depth.shape[1],
-                    ob_in_cams=estimator.pose_last.reshape(1, 4, 4), glctx=estimator.glctx,
-                    mesh_tensors=estimator.mesh_tensors, output_size=measured_depth.shape,
-                )
-            rendered = rendered_depth[0].detach().cpu().numpy()
-            result.update(depth_alignment(rendered, measured_depth))
-            return result
+
+            return validate_pose_result(corners, pose, detection_box, measured_depth,
+                                        evaluation_K, partial(render_depth, estimator), depth_alignment)
 
         def save_drift(before, after, rejected_pose, recovery_pose, rejected_validation,
                        recovery_validation, change):
@@ -271,12 +258,20 @@ def main():
                       "change_from_confirmed": change, "T_camera_target_m": target_pose.tolist()}
             stream.write(json.dumps(record, allow_nan=False) + "\n")
             stream.flush()
+            if pose_publisher:
+                pose_publisher.publish(target_pose, frame_stamp_ns)
             return target_pose
 
-        registration_not_before = 0.0
+        def segment_box(image, box):
+            with torch.inference_mode():
+                segmenter.set_image(image)
+                try:
+                    masks, scores, _ = segmenter.predict(box=box, multimask_output=False)
+                finally:
+                    segmenter.reset_predictor()
+            return masks[0].astype(bool), float(scores[0])
 
         def seek_pose():
-            nonlocal registration_not_before
             deadline = float("inf") if preview else time.monotonic() + 25
             status = "Aim at the target"
             while time.monotonic() < deadline:
@@ -290,11 +285,9 @@ def main():
                         return None
                     continue
                 box, confidence, mask = detection
-                now = time.monotonic()
-                if last_confirmed_pose_last is not None and now < registration_not_before:
-                    estimator.pose_last = last_confirmed_pose_last.clone()
-                    recovered = estimator.track_one(rgb=rgb, depth=depth, K=K, iteration=4)
-                    torch.cuda.synchronize()
+                action = session.seek_action(time.monotonic())
+                if action == "recover":
+                    recovered = session.track(rgb, depth, K, recover=True)
                     validation = validate_pose(recovered, box, depth)
                     elapsed = (time.perf_counter() - started) * 1000
                     if validation["accepted"]:
@@ -307,50 +300,24 @@ def main():
                     if preview and not preview.present(bgr, status):
                         return None
                     continue
-                if now < registration_not_before:
+                if action == "wait":
                     status = "Waiting before registration retry"
                     if preview and not preview.present(bgr, status):
                         return None
                     continue
-                registration_not_before = time.monotonic() + REGISTRATION_RETRY_S
-                init_scale = min(1.0, args.init_width / rgb.shape[1])
-                init_height = max(1, round(rgb.shape[0] * init_scale))
-                init_width = round(rgb.shape[1] * init_scale)
-                init_rgb = cv2.resize(rgb, (init_width, init_height), interpolation=cv2.INTER_LINEAR)
-                init_depth = cv2.resize(depth, (init_width, init_height), interpolation=cv2.INTER_NEAREST)
-                init_K = K.copy()
-                sx, sy = init_width / rgb.shape[1], init_height / rgb.shape[0]
-                init_K[0] *= sx
-                init_K[1] *= sy
+                session.begin_registration(time.monotonic())
+                try:
+                    candidate = prepare_registration(rgb, depth, K, args.init_width, box, mask, segment_box)
+                except RejectedMask as exc:
+                    status = str(exc)
+                    if preview and not preview.present(bgr, status):
+                        return None
+                    continue
                 mask_info = {"mask_backend": args.mask_backend}
-                if mask is not None:
-                    init_mask = cv2.resize(mask.astype(np.uint8), (init_width, init_height),
-                                           interpolation=cv2.INTER_NEAREST).astype(bool)
-                else:
-                    init_box = box * [sx, sy, sx, sy]
-                    with torch.inference_mode():
-                        segmenter.set_image(init_rgb)
-                        try:
-                            masks, scores, _ = segmenter.predict(box=init_box, multimask_output=False)
-                        finally:
-                            segmenter.reset_predictor()
-                    init_mask = masks[0].astype(bool)
-                    mask_info["sam2_score"] = float(scores[0])
-                ys, xs = np.nonzero(init_mask)
-                if (len(xs) < 128 or np.count_nonzero(init_depth[init_mask] > 0)
-                        < max(128, len(xs) // 10)):
-                    status = "Insufficient aligned depth in target mask"
-                    if preview and not preview.present(bgr, status):
-                        return None
-                    continue
-                mask_box = np.array([xs.min(), ys.min(), xs.max() + 1, ys.max() + 1])
-                if not box_in_view(mask_box, init_rgb.shape, margin=1):
-                    status = "Target mask clipped | Move target fully into view"
-                    if preview and not preview.present(bgr, status):
-                        return None
-                    continue
+                if candidate.score is not None:
+                    mask_info["sam2_score"] = candidate.score
                 overlay = bgr.copy()
-                overlay_mask = cv2.resize(init_mask.astype(np.uint8), (rgb.shape[1], rgb.shape[0]),
+                overlay_mask = cv2.resize(candidate.mask.astype(np.uint8), (rgb.shape[1], rgb.shape[0]),
                                           interpolation=cv2.INTER_NEAREST).astype(bool)
                 overlay[overlay_mask] = (overlay[overlay_mask] * 0.55
                                          + np.array([0, 255, 0]) * 0.45).astype(np.uint8)
@@ -360,11 +327,10 @@ def main():
                 if preview and not preview.present(overlay, "Target mask | Initializing FoundationPose"):
                     return None
                 started = time.perf_counter()
-                initial = estimator.register(K=init_K, rgb=init_rgb, depth=init_depth,
-                                             ob_mask=init_mask, iteration=args.est_refine_iter)
-                torch.cuda.synchronize()
+                initial = session.register(candidate.rgb, candidate.depth, candidate.K, candidate.mask,
+                                           args.est_refine_iter)
                 elapsed = (time.perf_counter() - started) * 1000
-                validation = validate_pose(initial, mask_box, init_depth, evaluation_K=init_K)
+                validation = validate_pose(initial, candidate.box, candidate.depth, evaluation_K=candidate.K)
                 if estimator.pose_last is None or not validation["accepted"]:
                     estimator.pose_last = None
                     status = "FoundationPose pose failed projection/depth validation"
@@ -385,7 +351,6 @@ def main():
         tracked_poses = registrations = checks = recoveries = resets = 0
         duration = 0.0
         init_ms = image = last_overlay = None
-        last_confirmed_pose = last_confirmed_pose_last = last_confirmed_frame = None
         with (args.output / "poses.jsonl").open("x", encoding="utf-8") as stream:
             try:
                 while not args.frames or tracked_poses < args.frames:
@@ -400,9 +365,7 @@ def main():
                         registrations += 1
                     else:
                         recoveries += 1
-                    last_confirmed_pose = pose.copy()
-                    last_confirmed_pose_last = estimator.pose_last.clone()
-                    last_confirmed_frame = rgb, depth, number, timestamp, pose.copy()
+                    session.confirm(rgb, depth, number, timestamp, pose)
                     last_overlay = bgr, pose, target_pose
                     image = draw_pose(bgr.copy(), pose, target_pose)
                     if registrations == 1 and stage == "register":
@@ -419,11 +382,10 @@ def main():
                             raise RuntimeError("Camera frame number did not advance")
                         number = new_number
                         stage, validation = "track", None
-                        pose = estimator.track_one(rgb=rgb, depth=depth, K=K, iteration=2)
-                        torch.cuda.synchronize()
+                        pose = session.track(rgb, depth, K)
                         bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
                         projection = projected_box(K, corners, pose)
-                        translation_change, rotation_change = pose_delta(last_confirmed_pose, pose)
+                        translation_change, rotation_change = pose_delta(session.confirmed_frame[4], pose)
                         change = {"translation_m": translation_change, "rotation_deg": rotation_change}
                         sudden_change = (translation_change > MAX_REVIEW_TRANSLATION_M
                                          or rotation_change > MAX_REVIEW_ROTATION_DEG)
@@ -436,17 +398,15 @@ def main():
                             if not validation["accepted"]:
                                 rejected_pose = pose.copy()
                                 rejected_validation = validation
-                                estimator.pose_last = last_confirmed_pose_last.clone()
-                                recovered = estimator.track_one(rgb=rgb, depth=depth, K=K, iteration=4)
-                                torch.cuda.synchronize()
+                                recovered = session.track(rgb, depth, K, recover=True)
                                 recovery_validation = validate_pose(recovered, detection_box, depth)
-                                save_drift(last_confirmed_frame,
+                                save_drift(session.confirmed_frame,
                                            (rgb, depth, number, timestamp, rejected_pose),
                                            rejected_pose, recovered, rejected_validation,
                                            recovery_validation, (translation_change, rotation_change))
                                 if recovery_validation["accepted"]:
                                     pose, validation, stage = recovered, recovery_validation, "recover"
-                                    translation_change, rotation_change = pose_delta(last_confirmed_pose, pose)
+                                    translation_change, rotation_change = pose_delta(session.confirmed_frame[4], pose)
                                     change = {"translation_m": translation_change,
                                               "rotation_deg": rotation_change}
                                     recoveries += 1
@@ -455,8 +415,7 @@ def main():
                                                       "backend": "last_confirmed_pose"}), flush=True)
                                 else:
                                     resets += 1
-                                    estimator.pose_last = None
-                                    registration_not_before = time.monotonic() + RECOVERY_WINDOW_S
+                                    session.tracking_lost(time.monotonic())
                                     if preview:
                                         preview.present(bgr, "Pose rejected | Recovering target")
                                     duration += time.perf_counter() - started
@@ -472,9 +431,7 @@ def main():
                         translations.append(target_pose[:3, 3])
                         tracked_poses += 1
                         if validation is not None and validation["accepted"]:
-                            last_confirmed_pose = pose.copy()
-                            last_confirmed_pose_last = estimator.pose_last.clone()
-                            last_confirmed_frame = rgb, depth, number, timestamp, pose.copy()
+                            session.confirm(rgb, depth, number, timestamp, pose)
                         last_overlay = bgr, pose, target_pose
                         if preview:
                             image = draw_pose(bgr, pose, target_pose)

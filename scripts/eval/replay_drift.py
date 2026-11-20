@@ -1,6 +1,7 @@
 """Replay a saved drift RGB-D pair at native resolution and optional downscaled widths."""
 
 import argparse
+from functools import partial
 import json
 from pathlib import Path
 import sys
@@ -13,11 +14,20 @@ import trimesh
 
 
 PROJECT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT / "src"))
 sys.path.insert(0, str(PROJECT / "apps"))
 sys.path.insert(0, str(PROJECT / "third_party/FoundationPose"))
-from estimater import FoundationPose, nvdiffrast_render, set_seed
-from jetson_foundationpose_d415 import detect_socket, box_iou, projected_box
+from estimater import FoundationPose
+from fdonpose.adapters.foundationpose import render_depth
+from fdonpose.application.tracking import TrackingSession
+from fdonpose.application.validation import validate_pose as validate_pose_result
 from pose_checks import depth_alignment, pose_delta
+from target_segmentation import TargetDetector
+
+
+def detect_box(detector, rgb):
+    detection = detector.predict(cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
+    return detection[0] if detection else None
 
 
 def scaled_input(rgb, depth, K, width):
@@ -35,18 +45,9 @@ def scaled_input(rgb, depth, K, width):
 
 def validate(estimator, pose, detection_box, depth, K):
     corners = np.asarray(np.meshgrid(*estimator.mesh_ori.bounds.T)).reshape(3, -1).T
-    iou = box_iou(projected_box(K, corners, pose), detection_box)
-    result = {"accepted": False, "alignment_iou": iou}
-    if detection_box is None or iou < 0.35:
-        return result
-    with torch.inference_mode():
-        _, rendered_depth, _ = nvdiffrast_render(
-            K=K, H=depth.shape[0], W=depth.shape[1],
-            ob_in_cams=estimator.pose_last.reshape(1, 4, 4), glctx=estimator.glctx,
-            mesh_tensors=estimator.mesh_tensors, output_size=depth.shape,
-        )
-    result.update(depth_alignment(rendered_depth[0].detach().cpu().numpy(), depth))
-    return result
+
+    return validate_pose_result(corners, pose, detection_box, depth, K, partial(render_depth, estimator),
+                                depth_alignment)
 
 
 def main():
@@ -64,8 +65,7 @@ def main():
     before_pose = np.loadtxt(directory / "before_pose.txt")
     mesh = trimesh.load(args.mesh, force="mesh")
     mesh.apply_scale(0.001)
-    from ultralytics import YOLO
-    detector = YOLO(str(args.weights))
+    detector = TargetDetector(args.weights, backend="sam2", class_id=0)
     rows = []
     for width in args.widths:
         if width > rgb.shape[1]:
@@ -76,17 +76,16 @@ def main():
         to_center = estimator.get_tf_to_centered_mesh().detach().cpu().numpy()
         estimator.pose_last = torch.as_tensor(before_pose @ np.linalg.inv(to_center),
                                               device="cuda", dtype=torch.float32)
+        session = TrackingSession(estimator, torch.cuda.synchronize)
         started = time.perf_counter()
-        pose = estimator.track_one(rgb=current_rgb, depth=current_depth, K=current_K, iteration=2)
-        torch.cuda.synchronize()
+        pose = session.track(current_rgb, current_depth, current_K)
         elapsed_ms = (time.perf_counter() - started) * 1000
-        detection = detect_socket(detector, cv2.cvtColor(current_rgb, cv2.COLOR_RGB2BGR))
-        validation = validate(estimator, pose, detection[0] if detection else None,
-                              current_depth, current_K)
+        detection_box = detect_box(detector, current_rgb)
+        validation = validate(estimator, pose, detection_box, current_depth, current_K)
         rows.append({"width": width, "height": current_rgb.shape[0], "track_ms": elapsed_ms,
                      "change_from_before": pose_delta(before_pose, pose), "validation": validation})
         estimator.glctx = None
-        del estimator
+        del session, estimator
         torch.cuda.empty_cache()
     args.output.write_text(json.dumps({"source": str(directory), "runs": rows}, indent=2) + "\n",
                            encoding="utf-8")

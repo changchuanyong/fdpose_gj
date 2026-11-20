@@ -10,6 +10,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # 绕过的目录：上游源码、产物、缓存
 SKIP_TOP = {"third_party", ".git", "artifacts", ".cache", ".runtime"}
+# colcon 输出目录里是源码副本，不参与布局检查
+SKIP_WS = {("ros2_ws", "build"), ("ros2_ws", "install"), ("ros2_ws", "log")}
 
 REQUIRED = (
     "README.md",
@@ -29,6 +31,13 @@ REQUIRED = (
     "patches/README.md",
     "patches/foundationpose-windows.patch",
     "apps/jetson_foundationpose_d415.py",
+    "src/fdonpose/domain/geometry.py",
+    "src/fdonpose/application/validation.py",
+    "src/fdonpose/application/tracking.py",
+    "src/fdonpose/adapters/foundationpose.py",
+    "src/fdonpose/adapters/ros2.py",
+    "ros2_ws/src/fdpose_bringup/package.xml",
+    "ros2_ws/src/fdpose_bringup/launch/fdpose_live.launch.py",
     "scripts/run_d415.sh",
     "scripts/run_330s.sh",
     "scripts/setup/jetson_setup.sh",
@@ -58,7 +67,7 @@ class LayoutTest(unittest.TestCase):
         problems = []
         for path in sorted(ROOT.rglob("*.py")):
             rel = path.relative_to(ROOT)
-            if rel.parts[0] in SKIP_TOP or "__pycache__" in rel.parts:
+            if rel.parts[0] in SKIP_TOP or rel.parts[:2] in SKIP_WS or "__pycache__" in rel.parts:
                 continue
             depth = len(rel.parts) - 1
             text = path.read_text(encoding="utf-8", errors="replace")
@@ -74,7 +83,7 @@ class LayoutTest(unittest.TestCase):
         for pattern in ("*.py", "*.md", "*.sh"):
             for path in ROOT.rglob(pattern):
                 rel = path.relative_to(ROOT)
-                if rel.parts[0] in SKIP_TOP or "__pycache__" in rel.parts:
+                if rel.parts[0] in SKIP_TOP or rel.parts[:2] in SKIP_WS or "__pycache__" in rel.parts:
                     continue
                 text = path.read_text(encoding="utf-8", errors="replace")
                 if legacy in text:

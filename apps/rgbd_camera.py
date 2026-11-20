@@ -15,6 +15,7 @@ class RGBDStream:
     K: np.ndarray
     metadata: dict
     read_frame: Callable[[], tuple[np.ndarray, np.ndarray, int, float]]
+    ros_stamp_ns: Callable[[], int] | None = None
 
 
 @contextmanager

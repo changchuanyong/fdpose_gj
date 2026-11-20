@@ -166,4 +166,4 @@ def open_orbbec_ros(serial, namespace='/gemini'):
                              "depth_resolution": [w, h], "K": K.tolist(),
                              "dist_coeffs": distortion.tolist(), "depth_scale_m": DEPTH_SCALE_M,
                              "timestamp_source": "ros_color_header", "frame_id": frame_id,
-                             "camera_namespace": namespace}, read_frame)
+                             "camera_namespace": namespace}, read_frame, lambda: buffer.last_stamps[0])

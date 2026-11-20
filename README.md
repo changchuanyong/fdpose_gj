@@ -83,6 +83,8 @@ D415 结果保存在 `artifacts/d415-live-*`，Gemini 结果保存在 `artifacts
 
 ## 文档与目录
 
+- [ROS 2 Humble 启动与位姿话题](ros2_ws/src/fdpose_bringup/README.md) · 包构建、启动参数、光学坐标系和时间戳
+
 - [Jetson 安装与验证](docs/jetson_setup.md) · 从零部署、固定版本、平台问题和官方样例复现
 - [充电口离线回放](docs/charging_replay.md) · 从 `robot-ev-charging` 数据记录运行 YOLO、SAM2 和 FoundationPose
 - [管件 RGB-D 重建](docs/pipe_rgbd.md) · 奥比中光 335L / RealSense D415 采集、网格重建与接入条件（尚未真机验证）
@@ -91,7 +93,9 @@ D415 结果保存在 `artifacts/d415-live-*`，Gemini 结果保存在 `artifacts
 - [文档索引](docs/index.md) · [上游归属与许可](NOTICE.md)
 
 ```text
-apps/        实时应用
+src/fdonpose/ domain/几何 · application/跟踪与验证流程 · adapters/FoundationPose 渲染适配
+apps/        实时入口、相机及显示集成（迁移期间保持现有启动方式）
+ros2_ws/src/ fdpose_perception 安装感知程序 · fdpose_bringup 组合启动
 scripts/     setup/ 部署 · pipeline/ 回放 · eval/ 评估 · probes/ 环境探针
 config/      运行时约束、上游版本和几何配置
 assets/      mesh/ 网格模型 · print/ 打印件

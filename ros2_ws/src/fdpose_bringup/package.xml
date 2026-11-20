@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>fdpose_bringup</name>
+  <version>0.1.0</version>
+  <description>Launch files for the fdpose FoundationPose application.</description>
+  <maintainer email="1984715306@qq.com">chang</maintainer>
+  <license>UNLICENSED</license>
+  <buildtool_depend>ament_python</buildtool_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>fdpose_perception</exec_depend>
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
