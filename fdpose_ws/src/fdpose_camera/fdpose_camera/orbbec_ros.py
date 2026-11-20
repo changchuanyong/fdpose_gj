@@ -86,30 +86,17 @@ class PairBuffer:
         return color, depth, self.infos['color'], self.infos['depth']
 
 
-@contextmanager
-def open_orbbec_ros(serial, namespace='/gemini'):
-    try:
-        import rclpy
-        from rclpy.context import Context
-        from rclpy.executors import SingleThreadedExecutor
+class OrbbecRosSource:
+    """Attachable Gemini RGB-D source bound to an existing node and executor."""
+
+    def __init__(self, node, executor, serial, namespace='/gemini'):
         from rclpy.qos import QoSProfile, ReliabilityPolicy
         from orbbec_camera_msgs.srv import GetDeviceInfo
         from sensor_msgs.msg import CameraInfo, Image
-    except ImportError as exc:
-        raise RuntimeError('Source ROS 2 and the Orbbec driver workspace before running the RGB-D client') from exc
 
-    namespace = '/' + namespace.strip('/')
-    if namespace == '/':
-        raise ValueError('An explicit Orbbec camera namespace is required')
-    context = Context()
-    rclpy.init(context=context)
-    with ExitStack() as stack:
-        stack.callback(context.try_shutdown)
-        node = rclpy.create_node('fdpose_rgbd', context=context, enable_rosout=False)
-        stack.callback(node.destroy_node)
-        executor = SingleThreadedExecutor(context=context)
-        executor.add_node(node)
-        stack.callback(executor.shutdown)
+        namespace = '/' + namespace.strip('/')
+        if namespace == '/':
+            raise ValueError('An explicit Orbbec camera namespace is required')
         client = node.create_client(GetDeviceInfo, namespace + '/get_device_info')
         if not client.wait_for_service(timeout_sec=8.0):
             raise RuntimeError(f'No Orbbec device info service under {namespace}; check the ROS domain and namespace')
@@ -123,47 +110,73 @@ def open_orbbec_ros(serial, namespace='/gemini'):
                 or device.name.strip().upper().split()[-1] not in ('335L', '336L')):
             raise RuntimeError(f'Unexpected Orbbec camera {device.name} {device.serial_number}, expected {serial}')
 
-        buffer = PairBuffer()
+        self._executor = executor
+        self._buffer = PairBuffer()
         qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT)
         for kind in ('color', 'depth'):
             path = f'{namespace}/{kind}'
             node.create_subscription(Image, path + '/image_raw',
-                                     lambda msg, key=kind: buffer.images.__setitem__(key, msg), qos)
+                                     lambda msg, key=kind: self._buffer.images.__setitem__(key, msg), qos)
             node.create_subscription(CameraInfo, path + '/camera_info',
-                                     lambda msg, key=kind: buffer.infos.__setitem__(key, msg), qos)
+                                     lambda msg, key=kind: self._buffer.infos.__setitem__(key, msg), qos)
 
-        def next_pair():
-            deadline = time.monotonic() + 4.0
-            while time.monotonic() < deadline:
-                executor.spin_once(timeout_sec=0.1)
-                pair = buffer.pop()
-                if pair is not None:
-                    return pair
-            raise RuntimeError(f'No synchronized RGB-D pair with CameraInfo under {namespace} within 4 s')
-
-        first = next_pair()
+        first = self._next_pair()
         K, distortion = aligned_calibration(*first)
         w, h = first[0].width, first[0].height
         frame_id = first[0].header.frame_id
-        rectify = cv2.initUndistortRectifyMap(K, distortion, None, K, (w, h), cv2.CV_32FC1) if np.any(distortion) else None
-        frame_number = 0
+        self._rectify = cv2.initUndistortRectifyMap(K, distortion, None, K, (w, h), cv2.CV_32FC1) if np.any(distortion) else None
+        self._w, self._h, self._frame_id = w, h, frame_id
+        self._K, self._distortion = K, distortion
+        self._first = first
+        self._frame_number = 0
+        self.K = K
+        self.metadata = {"camera": device.name, "serial": device.serial_number,
+                         "firmware": device.firmware_version, "rgb_resolution": [w, h],
+                         "depth_resolution": [w, h], "K": K.tolist(),
+                         "dist_coeffs": distortion.tolist(), "depth_scale_m": DEPTH_SCALE_M,
+                         "timestamp_source": "ros_color_header", "frame_id": frame_id,
+                         "camera_namespace": namespace}
+        self.ros_stamp_ns = lambda: self._buffer.last_stamps[0]
 
-        def read_frame():
-            nonlocal first, frame_number
-            pair = first if first is not None else next_pair()
-            first = None
-            color, depth, _, _ = pair
-            observed_K, observed_d = aligned_calibration(*pair)
-            if ((color.width, color.height, color.header.frame_id) != (w, h, frame_id)
-                    or not np.array_equal(observed_K, K) or not np.array_equal(observed_d, distortion)):
-                raise RuntimeError('Orbbec camera calibration or stream format changed; restart tracking')
-            rgb, meters = decode_pair(color, depth, rectify)
-            frame_number += 1
-            return rgb, meters, frame_number, stamp_ns(color) / 1_000_000
+    def _next_pair(self):
+        deadline = time.monotonic() + 4.0
+        while time.monotonic() < deadline:
+            self._executor.spin_once(timeout_sec=0.1)
+            pair = self._buffer.pop()
+            if pair is not None:
+                return pair
+        raise RuntimeError('No synchronized RGB-D pair with CameraInfo within 4 s')
 
-        yield RGBDStream(K, {"camera": device.name, "serial": device.serial_number,
-                             "firmware": device.firmware_version, "rgb_resolution": [w, h],
-                             "depth_resolution": [w, h], "K": K.tolist(),
-                             "dist_coeffs": distortion.tolist(), "depth_scale_m": DEPTH_SCALE_M,
-                             "timestamp_source": "ros_color_header", "frame_id": frame_id,
-                             "camera_namespace": namespace}, read_frame, lambda: buffer.last_stamps[0])
+    def read_frame(self):
+        pair = self._first if self._first is not None else self._next_pair()
+        self._first = None
+        color, depth, _, _ = pair
+        observed_K, observed_d = aligned_calibration(*pair)
+        if ((color.width, color.height, color.header.frame_id) != (self._w, self._h, self._frame_id)
+                or not np.array_equal(observed_K, self._K) or not np.array_equal(observed_d, self._distortion)):
+            raise RuntimeError('Orbbec camera calibration or stream format changed; restart tracking')
+        rgb, meters = decode_pair(color, depth, self._rectify)
+        self._frame_number += 1
+        return rgb, meters, self._frame_number, stamp_ns(color) / 1_000_000
+
+
+@contextmanager
+def open_orbbec_ros(serial, namespace='/gemini'):
+    try:
+        import rclpy
+        from rclpy.context import Context
+        from rclpy.executors import SingleThreadedExecutor
+    except ImportError as exc:
+        raise RuntimeError('Source ROS 2 and the Orbbec driver workspace before running the RGB-D client') from exc
+
+    context = Context()
+    rclpy.init(context=context)
+    with ExitStack() as stack:
+        stack.callback(context.try_shutdown)
+        node = rclpy.create_node('fdpose_rgbd', context=context, enable_rosout=False)
+        stack.callback(node.destroy_node)
+        executor = SingleThreadedExecutor(context=context)
+        executor.add_node(node)
+        stack.callback(executor.shutdown)
+        source = OrbbecRosSource(node, executor, serial, namespace)
+        yield RGBDStream(source.K, source.metadata, source.read_frame, source.ros_stamp_ns)

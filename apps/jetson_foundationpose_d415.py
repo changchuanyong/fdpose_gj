@@ -23,33 +23,13 @@ from fdpose_camera.rgbd import open_d415
 from fdpose_perception.adapters.detector import Sam2Segmenter, TargetDetector
 from fdpose_perception.adapters.foundationpose import draw_pose, render_depth
 from fdpose_perception.adapters.ros2 import PosePublisher
-from fdpose_perception.pipeline import PosePipeline, TrackingSession
+from fdpose_perception.pipeline import PosePipeline, TrackingSession, UNIT_TO_M, load_cad_from_target
 from fdpose_perception.preview import GeminiPreview, PreviewWindow
 from fdpose_perception.recording import Recorder
 from fdpose_perception.validation import depth_alignment, validate_pose as validate_pose_result
 
 
 CHECK_PERIOD_S = 0.6
-
-
-UNIT_TO_M = {"mm": 0.001, "m": 1.0}
-
-
-def load_cad_from_target(path):
-    geometry = json.loads(path.read_text(encoding="utf-8-sig"))
-    units = geometry.get("units", "mm")
-    if units not in UNIT_TO_M:
-        raise ValueError(f"Unsupported geometry units {units!r}: {path}")
-    target_from_cad = np.asarray(geometry["cad_to_target"], dtype=float)
-    if (target_from_cad.shape != (4, 4) or not np.isfinite(target_from_cad).all()
-            or not np.allclose(target_from_cad[3], [0, 0, 0, 1])):
-        raise ValueError(f"cad_to_target must be a finite 4x4 homogeneous transform: {path}")
-    rotation = target_from_cad[:3, :3]
-    if (not np.allclose(rotation.T @ rotation, np.eye(3), atol=1e-4)
-            or not np.isclose(np.linalg.det(rotation), 1, atol=1e-4)):
-        raise ValueError(f"cad_to_target must contain a proper rotation: {path}")
-    target_from_cad[:3, 3] *= UNIT_TO_M[units]
-    return np.linalg.inv(target_from_cad)
 
 
 def parse_args(argv=None):

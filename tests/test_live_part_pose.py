@@ -18,7 +18,7 @@ if np is not None:
                                     str(_root / "fdpose_ws/src/fdpose_perception"),
                                     str(_root / "fdpose_ws/src/fdpose_camera"), *sys.path]):
         from jetson_foundationpose_d415 import load_cad_from_target, parse_args
-        from fdpose_camera.orbbec_ros import PairBuffer, aligned_calibration, decode_pair, stamp_ns
+        from fdpose_camera.orbbec_ros import OrbbecRosSource, PairBuffer, aligned_calibration, decode_pair, stamp_ns
         from fdpose_camera.rgbd import open_d415
         from fdpose_perception.adapters.detector import TargetDetector, select_target
 
@@ -178,6 +178,31 @@ class LivePartPoseTest(unittest.TestCase):
         depth.header.frame_id = "gemini_depth_optical_frame"
         with self.assertRaisesRegex(RuntimeError, "registered to the color"):
             aligned_calibration(color, depth, info, info)
+
+    def test_orbbec_source_read_frame_decodes_and_advances(self):
+        source = OrbbecRosSource.__new__(OrbbecRosSource)
+        rgb = np.arange(18, dtype=np.uint8).reshape(2, 3, 3)
+        z = np.array([[400, 0, 600], [700, 800, 900]], dtype="<u2")
+        K = np.array([[4., 0., 1.], [0., 5., 0.5], [0., 0., 1.]])
+        frame = "gemini_color_optical_frame"
+        header = SimpleNamespace(frame_id=frame, stamp=SimpleNamespace(sec=1, nanosec=0))
+        color = SimpleNamespace(encoding="rgb8", width=3, height=2, step=9,
+                                data=rgb.tobytes(), is_bigendian=False, header=header)
+        depth = SimpleNamespace(encoding="16UC1", width=3, height=2, step=6,
+                                data=z.tobytes(), is_bigendian=False, header=header)
+        info = SimpleNamespace(width=3, height=2, header=SimpleNamespace(frame_id=frame),
+                               k=K.ravel().tolist(), d=[0] * 8, distortion_model="rational_polynomial")
+        source._first = (color, depth, info, info)
+        source._buffer = PairBuffer()
+        source._K, source._distortion, source._rectify = K, np.zeros(8), None
+        source._w, source._h, source._frame_id = 3, 2, frame
+        source._frame_number = 0
+        source.ros_stamp_ns = lambda: source._buffer.last_stamps[0]
+        out_rgb, meters, number, _ = source.read_frame()
+        np.testing.assert_array_equal(out_rgb, rgb)
+        np.testing.assert_allclose(meters, z.astype(np.float32) / 1000)
+        self.assertEqual(1, number)
+        self.assertIsNone(source._first)
 
     def test_orbbec_pair_buffer_matches_nearby_monotonic_frames(self):
         def msg(milliseconds, extra_ns=0):
