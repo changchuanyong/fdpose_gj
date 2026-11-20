@@ -17,7 +17,7 @@ if np is not None:
     with patch.object(sys, "path", [str(_root / "apps"),
                                     str(_root / "src/fdpose_perception"),
                                     str(_root / "src/fdpose_camera"), *sys.path]):
-        from jetson_foundationpose_d415 import load_cad_from_target, parse_args
+        from live_pose import load_cad_from_target, parse_args
         from fdpose_camera.orbbec_ros import OrbbecRosSource, PairBuffer, aligned_calibration, decode_pair, stamp_ns
         from fdpose_camera.rgbd import open_d415
         from fdpose_perception.adapters.detector import TargetDetector, select_target

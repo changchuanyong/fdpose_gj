@@ -23,7 +23,7 @@ def generate_launch_description():
         DeclareLaunchArgument("pose_topic", default_value="/fdpose/pose"),
     ]
     root = LaunchConfiguration("project_root")
-    entry = PathJoinSubstitution([root, "apps", "jetson_foundationpose_d415.py"])
+    entry = PathJoinSubstitution([root, "apps", "live_pose.py"])
     return LaunchDescription(arguments + [
         ExecuteProcess(
             cmd=[

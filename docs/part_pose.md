@@ -68,7 +68,7 @@ ros2 launch orbbec_camera gemini_330_series.launch.py \
 终端二在 `fdpose` 仓库根目录启动位姿程序。将示例的三个零件文件路径替换为实际路径。`--show` 仅在 Jetson 桌面终端有显示服务时使用。
 
 ```bash
-~/venvs/ev-charging-d415-gpu/bin/python -u -B apps/jetson_foundationpose_d415.py \
+~/venvs/ev-charging-d415-gpu/bin/python -u -B apps/live_pose.py \
   --camera orbbec-ros --camera-namespace /gemini --serial "$SERIAL" \
   --mask-backend yolo-seg --weights weights/part-seg.pt --class-id 0 \
   --mesh assets/mesh/part.PLY --geometry config/geometry/part.json \

@@ -74,7 +74,7 @@ def capture(directory, serial, estimator):
 
     timings, frames = [], []
     instrument(estimator, timings, frames)
-    script = PROJECT / "apps/jetson_foundationpose_d415.py"
+    script = PROJECT / "apps/live_pose.py"
     live = directory / "live"
     sys.argv = [str(script), "--serial", serial, "--mesh", str(MESH),
                 "--geometry", str(PROJECT / "config/geometry/socket_openings_ply.json"),

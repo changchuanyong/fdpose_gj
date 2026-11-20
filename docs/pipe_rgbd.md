@@ -113,7 +113,7 @@ artifacts/elbow-rgbd-001/
 
 ### 5. 改用 RealSense D415 采集
 
-没有 335L 时可以用 RealSense D415 采集，输出目录格式与上面完全一致，后续掩膜和重建步骤不变。依赖 `pyrealsense2`（仓库实时位姿程序已在用），取流方式与 `apps/jetson_foundationpose_d415.py` 一致：彩色 rgb8、深度 z16、`rs.align` 对齐到彩色、brown_conrady 去畸变。
+没有 335L 时可以用 RealSense D415 采集，输出目录格式与上面完全一致，后续掩膜和重建步骤不变。依赖 `pyrealsense2`（仓库实时位姿程序已在用），取流方式与 `apps/live_pose.py` 一致：彩色 rgb8、深度 z16、`rs.align` 对齐到彩色、brown_conrady 去畸变。
 
 ```bash
 python scripts/pipeline/realsense_capture.py \

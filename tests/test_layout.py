@@ -28,7 +28,7 @@ REQUIRED = (
     "assets/print/socket_tag_m6_v2_sliced.3mf",
     "patches/README.md",
     "patches/foundationpose-windows.patch",
-    "apps/jetson_foundationpose_d415.py",
+    "apps/live_pose.py",
     "src/fdpose_perception/setup.py",
     "src/fdpose_perception/package.xml",
     "src/fdpose_perception/fdpose_perception/geometry.py",

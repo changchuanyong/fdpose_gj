@@ -35,13 +35,13 @@ bash ~/fdonpose/scripts/run_d415.sh
 
 [Gemini 启动脚本](scripts/run_330s.sh) 需要已部署的 ROS 2 Humble、`~/HKR_WorkSpace/ros2_ws` Orbbec 驱动工作区和项目 Python 环境。脚本启动相机，等待设备服务就绪，再打开桌面窗口持续跟踪。默认使用 336L 序列号 `CPCD7530009J`；换用 335L 或其他 336L 时，在命令前设置 `ORBBEC_SERIAL`。按 **Q** 或 **Esc** 退出，脚本会停止相机驱动。
 
-**实际调用链：** `run_330s.sh` 先启动 `orbbec_camera` 的 `gemini_330_series.launch.py`；等 `/gemini/get_device_info` 就绪后，再调用[共用位姿程序](apps/jetson_foundationpose_d415.py)。虽然文件名带 `d415`，脚本显式传入 `--camera orbbec-ros --camera-namespace /gemini`，因此读取的是 Gemini 的 RGB-D。
+**实际调用链：** `run_330s.sh` 先启动 `orbbec_camera` 的 `gemini_330_series.launch.py`；等 `/gemini/get_device_info` 就绪后，再调用[共用位姿程序](apps/live_pose.py)，显式传入 `--camera orbbec-ros --camera-namespace /gemini`，因此读取的是 Gemini 的 RGB-D。
 
 **SSH / 无显示器入口：** 桌面脚本固定传入 `--show`，无显示器时不要直接运行它。按[零件接入指南的 Gemini 双终端步骤](docs/part_pose.md)初始化两个 Jetson 终端，在终端一启动相机驱动。终端二使用相同 ROS 域和序列号，在仓库根目录运行以下充电口测试；结束后，在终端一按 **Ctrl+C** 停止相机。
 
 ```bash
 cd ~/fdonpose
-~/venvs/ev-charging-d415-gpu/bin/python -u -B apps/jetson_foundationpose_d415.py \
+~/venvs/ev-charging-d415-gpu/bin/python -u -B apps/live_pose.py \
   --camera orbbec-ros --camera-namespace /gemini --serial "$SERIAL" \
   --weights weights/best.pt --mask-backend sam2 --mesh assets/mesh/socket_mod.PLY \
   --geometry config/geometry/socket_openings_ply.json \

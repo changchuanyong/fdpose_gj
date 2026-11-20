@@ -1,4 +1,4 @@
-"""Track a configured part with live RGB-D and FoundationPose on Jetson."""
+"""Desktop CLI: track a configured part with D415 or Gemini RGB-D via FoundationPose."""
 
 import argparse
 from contextlib import ExitStack
