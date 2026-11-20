@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import sys
 import unittest
+from pathlib import Path
 
 try:
+    import cv2  # noqa: F401
     import numpy as np
 except ModuleNotFoundError:
     np = None
 
 if np is not None:
-    from apps.pose_checks import depth_alignment, pose_delta
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "fdpose_ws/src/fdpose_perception"))
+    from fdpose_perception.validation import depth_alignment, pose_delta
 
 
 @unittest.skipIf(np is None, "NumPy is unavailable in the standard-library-only smoke environment")

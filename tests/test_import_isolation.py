@@ -21,7 +21,9 @@ CORE_MODULES = (
     "fdpose_perception.geometry",
     "fdpose_perception.pipeline",
     "fdpose_perception.validation",
+    "fdpose_perception.preview",
     "fdpose_perception.adapters.foundationpose",
+    "fdpose_perception.adapters.detector",
     "fdpose_perception.adapters.ros2",
 )
 

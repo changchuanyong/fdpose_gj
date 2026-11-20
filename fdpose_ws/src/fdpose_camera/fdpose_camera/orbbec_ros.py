@@ -6,7 +6,7 @@ import time
 import cv2
 import numpy as np
 
-from rgbd_camera import RGBDStream
+from fdpose_camera.rgbd import RGBDStream
 
 
 # The Orbbec ROS driver multiplies raw depth by the device ValueScale before

@@ -15,20 +15,20 @@ import time
 import cv2
 import numpy as np
 
-from pose_checks import (MAX_REVIEW_ROTATION_DEG, MAX_REVIEW_TRANSLATION_M,
-                         depth_alignment, pose_delta)
-from rgbd_camera import open_d415
-from target_segmentation import TargetDetector
-
-
 CODE_ROOT = Path(__file__).resolve().parents[1]
 ROOT = Path(os.environ.get("FDPOSE_ROOT", CODE_ROOT)).resolve()
 sys.path.insert(0, str(CODE_ROOT / "fdpose_ws/src/fdpose_perception"))
+sys.path.insert(0, str(CODE_ROOT / "fdpose_ws/src/fdpose_camera"))
+from fdpose_camera.rgbd import open_d415
+from fdpose_perception.adapters.detector import Sam2Segmenter, TargetDetector
 from fdpose_perception.adapters.foundationpose import render_depth
 from fdpose_perception.adapters.ros2 import PosePublisher
-from fdpose_perception.pipeline import RejectedMask, TrackingSession, prepare_registration
-from fdpose_perception.validation import validate_pose as validate_pose_result
 from fdpose_perception.geometry import box_in_view, projected_box
+from fdpose_perception.pipeline import RejectedMask, TrackingSession, prepare_registration
+from fdpose_perception.preview import GeminiPreview, PreviewWindow
+from fdpose_perception.validation import (MAX_REVIEW_ROTATION_DEG, MAX_REVIEW_TRANSLATION_M,
+                                          depth_alignment, pose_delta,
+                                          validate_pose as validate_pose_result)
 
 
 CHECK_PERIOD_S = 0.6
@@ -52,40 +52,6 @@ def load_cad_from_target(path):
         raise ValueError(f"cad_to_target must contain a proper rotation: {path}")
     target_from_cad[:3, 3] *= UNIT_TO_M[units]
     return np.linalg.inv(target_from_cad)
-
-
-class PreviewWindow:
-    """Show FoundationPose overlays on the Jetson desktop."""
-
-    def __init__(self, camera_name):
-        import tkinter as tk
-        from PIL import Image, ImageTk
-
-        self.root = tk.Tk()
-        self.title = f"FoundationPose | {camera_name}"
-        self.root.title(self.title)
-        self.label = tk.Label(self.root)
-        self.label.pack()
-        self.closed = False
-        self.root.protocol("WM_DELETE_WINDOW", self.request_close)
-        for key in ("<Escape>", "<q>", "<Q>"):
-            self.root.bind(key, self.request_close)
-        self.image = Image
-        self.photo_image = ImageTk.PhotoImage
-
-    def request_close(self, _event=None):
-        self.closed = True
-
-    def present(self, bgr, status):
-        self.root.title(f"{self.title} | {status}")
-        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-        self.photo = self.photo_image(self.image.fromarray(rgb))
-        self.label.configure(image=self.photo)
-        self.root.update()
-        return not self.closed
-
-    def close(self):
-        self.root.destroy()
 
 
 def parse_args(argv=None):
@@ -156,27 +122,19 @@ def main():
     detector = TargetDetector(args.weights, args.mask_backend, args.class_id)
     segmenter = None
     if args.mask_backend == "sam2":
-        sys.path.insert(0, str(ROOT / "third_party/sam2"))
-        from sam2.build_sam import build_sam2
-        from sam2.sam2_image_predictor import SAM2ImagePredictor
-
-        segmenter = SAM2ImagePredictor(build_sam2(
-            "configs/sam2.1/sam2.1_hiera_s.yaml", str(args.sam2_checkpoint),
-            device="cuda", apply_postprocessing=False,
-        ))
+        segmenter = Sam2Segmenter(args.sam2_checkpoint, ROOT / "third_party/sam2")
     estimator = FoundationPose(model_pts=mesh.vertices, model_normals=mesh.vertex_normals,
                                mesh=mesh, debug=0, debug_dir=str(args.output))
     session = TrackingSession(estimator, torch.cuda.synchronize)
     with ExitStack() as stack:
         if args.camera == "orbbec-ros":
-            from orbbec_ros_camera import open_orbbec_ros
+            from fdpose_camera.orbbec_ros import open_orbbec_ros
 
             camera = stack.enter_context(open_orbbec_ros(args.serial, args.camera_namespace))
         else:
             camera = stack.enter_context(open_d415(args.serial, args.stream_width, args.stream_height))
         live_preview = None
         if args.show and args.camera == "orbbec-ros":
-            from gemini_preview import GeminiPreview
             live_preview = GeminiPreview(camera.metadata["camera"])
         preview = live_preview or (PreviewWindow(camera.metadata["camera"]) if args.show else None)
         if preview:
@@ -261,14 +219,7 @@ def main():
                 pose_publisher.publish(target_pose, frame_stamp_ns)
             return target_pose
 
-        def segment_box(image, box):
-            with torch.inference_mode():
-                segmenter.set_image(image)
-                try:
-                    masks, scores, _ = segmenter.predict(box=box, multimask_output=False)
-                finally:
-                    segmenter.reset_predictor()
-            return masks[0].astype(bool), float(scores[0])
+        segment_box = segmenter.segment_box if segmenter else None
 
         def seek_pose():
             deadline = float("inf") if preview else time.monotonic() + 25

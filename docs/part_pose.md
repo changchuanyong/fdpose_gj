@@ -42,7 +42,7 @@ bash scripts/run_d415.sh \
 
 ## 启动 Gemini 335L / 336L（Jetson）
 
-两款相机共用 [Orbbec ROS 2 适配器](../apps/orbbec_ros_camera.py)，D415 启动不变。Jetson 需要已有的 ROS 2 Humble 与 Orbbec ROS 驱动工作区；此路径**不依赖** `pyorbbecsdk`。录制重建数据的 [Orbbec SDK 采集脚本](../scripts/pipeline/orbbec_capture.py) 是另一条路径。
+两款相机共用 [Orbbec ROS 2 适配器](../fdpose_ws/src/fdpose_camera/fdpose_camera/orbbec_ros.py)，D415 启动不变。Jetson 需要已有的 ROS 2 Humble 与 Orbbec ROS 驱动工作区；此路径**不依赖** `pyorbbecsdk`。录制重建数据的 [Orbbec SDK 采集脚本](../scripts/pipeline/orbbec_capture.py) 是另一条路径。
 
 在两个 Jetson 终端分别执行以下环境初始化。将工作区路径和序列号替换成实际值；两个终端的 ROS 域与序列号保持一致。
 

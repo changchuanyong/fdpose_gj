@@ -11,8 +11,8 @@ except ModuleNotFoundError:
     cv2 = np = None
 
 if np is not None:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "apps"))
-    from gemini_preview import GeminiPreview
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "fdpose_ws/src/fdpose_perception"))
+    from fdpose_perception.preview import GeminiPreview
 
 
 @unittest.skipIf(np is None, "Requires OpenCV and NumPy")

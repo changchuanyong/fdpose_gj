@@ -1,6 +1,7 @@
 """Select one target instance for live pose registration."""
 
 from pathlib import Path
+import sys
 
 import numpy as np
 
@@ -46,3 +47,28 @@ class TargetDetector:
                                     device=0, verbose=False, **options)[0]
         return select_target(result, bgr.shape, self.class_id, confidence,
                              require_mask=self.require_mask)
+
+
+class Sam2Segmenter:
+    """SAM2.1 box-prompted mask refinement; builds the predictor lazily on CUDA."""
+
+    def __init__(self, checkpoint, sam2_root):
+        sys.path.insert(0, str(sam2_root))
+        from sam2.build_sam import build_sam2
+        from sam2.sam2_image_predictor import SAM2ImagePredictor
+
+        self.predictor = SAM2ImagePredictor(build_sam2(
+            "configs/sam2.1/sam2.1_hiera_s.yaml", str(checkpoint),
+            device="cuda", apply_postprocessing=False,
+        ))
+
+    def segment_box(self, image, box):
+        import torch
+
+        with torch.inference_mode():
+            self.predictor.set_image(image)
+            try:
+                masks, scores, _ = self.predictor.predict(box=box, multimask_output=False)
+            finally:
+                self.predictor.reset_predictor()
+        return masks[0].astype(bool), float(scores[0])

@@ -86,3 +86,37 @@ class GeminiPreview:
             self.process.join()
         self.updates.cancel_join_thread()
         self.updates.close()
+
+
+class PreviewWindow:
+    """Show FoundationPose overlays on the Jetson desktop."""
+
+    def __init__(self, camera_name):
+        import tkinter as tk
+        from PIL import Image, ImageTk
+
+        self.root = tk.Tk()
+        self.title = f"FoundationPose | {camera_name}"
+        self.root.title(self.title)
+        self.label = tk.Label(self.root)
+        self.label.pack()
+        self.closed = False
+        self.root.protocol("WM_DELETE_WINDOW", self.request_close)
+        for key in ("<Escape>", "<q>", "<Q>"):
+            self.root.bind(key, self.request_close)
+        self.image = Image
+        self.photo_image = ImageTk.PhotoImage
+
+    def request_close(self, _event=None):
+        self.closed = True
+
+    def present(self, bgr, status):
+        self.root.title(f"{self.title} | {status}")
+        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+        self.photo = self.photo_image(self.image.fromarray(rgb))
+        self.label.configure(image=self.photo)
+        self.root.update()
+        return not self.closed
+
+    def close(self):
+        self.root.destroy()

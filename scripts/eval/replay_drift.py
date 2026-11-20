@@ -15,14 +15,13 @@ import trimesh
 
 PROJECT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT / "fdpose_ws/src/fdpose_perception"))
-sys.path.insert(0, str(PROJECT / "apps"))
 sys.path.insert(0, str(PROJECT / "third_party/FoundationPose"))
 from estimater import FoundationPose
 from fdpose_perception.adapters.foundationpose import render_depth
 from fdpose_perception.pipeline import TrackingSession
 from fdpose_perception.validation import validate_pose as validate_pose_result
-from pose_checks import depth_alignment, pose_delta
-from target_segmentation import TargetDetector
+from fdpose_perception.validation import depth_alignment, pose_delta
+from fdpose_perception.adapters.detector import TargetDetector
 
 
 def detect_box(detector, rgb):
