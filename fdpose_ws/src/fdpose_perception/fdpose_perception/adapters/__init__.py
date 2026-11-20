@@ -1,0 +1,1 @@
+"""FoundationPose 渲染、检测与 ROS 输出适配。"""

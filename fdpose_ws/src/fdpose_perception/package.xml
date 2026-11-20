@@ -5,9 +5,11 @@
   <description>RGB-D target pose registration, tracking and ROS pose output.</description>
   <maintainer email="1984715306@qq.com">chang</maintainer>
   <license>UNLICENSED</license>
-  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_python</buildtool_depend>
   <exec_depend>rclpy</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
-  <export><build_type>ament_cmake</build_type></export>
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
 </package>

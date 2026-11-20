@@ -7,9 +7,9 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "fdpose_ws/src/fdpose_perception"))
 
-from fdonpose.application.tracking import TrackingSession
+from fdpose_perception.pipeline import TrackingSession
 
 
 class TrackingSessionTest(unittest.TestCase):

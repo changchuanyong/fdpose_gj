@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "fdpose_ws/src/fdpose_perception"))
 
 try:
     import numpy as np
@@ -13,7 +13,7 @@ except ModuleNotFoundError:
     np = None
 
 if np is not None:
-    from fdonpose.domain.geometry import box_in_view, box_iou, projected_box
+    from fdpose_perception.geometry import box_in_view, box_iou, projected_box
 
 
 @unittest.skipIf(np is None, "NumPy is unavailable")

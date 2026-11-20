@@ -3,10 +3,9 @@
 import os
 from pathlib import Path
 
-from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 
 
 def generate_launch_description():
@@ -24,11 +23,11 @@ def generate_launch_description():
         DeclareLaunchArgument("pose_topic", default_value="/fdpose/pose"),
     ]
     root = LaunchConfiguration("project_root")
-    entry = Path(get_package_share_directory("fdpose_perception")) / "apps/jetson_foundationpose_d415.py"
+    entry = PathJoinSubstitution([root, "apps", "jetson_foundationpose_d415.py"])
     return LaunchDescription(arguments + [
         ExecuteProcess(
             cmd=[
-                LaunchConfiguration("python"), "-u", str(entry),
+                LaunchConfiguration("python"), "-u", entry,
                 "--camera", LaunchConfiguration("camera"),
                 "--camera-namespace", LaunchConfiguration("camera_namespace"),
                 "--serial", LaunchConfiguration("serial"),

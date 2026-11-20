@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "fdpose_ws/src/fdpose_perception"))
 
 try:
     import numpy as np
@@ -14,7 +14,7 @@ except ModuleNotFoundError:
     np = None
 
 if np is not None:
-    from fdonpose.application.validation import validate_pose
+    from fdpose_perception.validation import validate_pose
 
 
 @unittest.skipIf(np is None, "NumPy is unavailable")

@@ -1,1 +1,0 @@
-"""Reusable FoundationPose application components."""

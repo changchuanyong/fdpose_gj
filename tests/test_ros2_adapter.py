@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "fdpose_ws/src/fdpose_perception"))
 
 try:
     import numpy as np
@@ -13,7 +13,7 @@ except ModuleNotFoundError:
     np = None
 
 if np is not None:
-    from fdonpose.adapters.ros2 import rotation_matrix_to_quaternion
+    from fdpose_perception.adapters.ros2 import rotation_matrix_to_quaternion
 
 
 @unittest.skipIf(np is None, "NumPy is unavailable")

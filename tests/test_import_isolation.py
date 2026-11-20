@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "fdpose_ws/src/fdpose_perception"))
 
 try:
     import cv2  # noqa: F401
@@ -18,12 +18,11 @@ except ModuleNotFoundError:
     np = None
 
 CORE_MODULES = (
-    "fdonpose.domain.geometry",
-    "fdonpose.application.registration",
-    "fdonpose.application.tracking",
-    "fdonpose.application.validation",
-    "fdonpose.adapters.foundationpose",
-    "fdonpose.adapters.ros2",
+    "fdpose_perception.geometry",
+    "fdpose_perception.pipeline",
+    "fdpose_perception.validation",
+    "fdpose_perception.adapters.foundationpose",
+    "fdpose_perception.adapters.ros2",
 )
 
 # sys.modules 中置 None 会让对应 import 直接抛 ImportError，从而证明核心不在顶层依赖它们。
@@ -34,7 +33,7 @@ BLOCKED = {"rclpy": None, "geometry_msgs": None, "torch": None, "estimater": Non
 class ImportIsolationTest(unittest.TestCase):
     def test_core_imports_without_ros_or_cuda(self):
         saved = {name: sys.modules.pop(name) for name in list(sys.modules)
-                 if name == "fdonpose" or name.startswith("fdonpose.")}
+                 if name == "fdpose_perception" or name.startswith("fdpose_perception.")}
         try:
             with patch.dict(sys.modules, BLOCKED):
                 for name in CORE_MODULES:

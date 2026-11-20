@@ -23,13 +23,12 @@ from target_segmentation import TargetDetector
 
 CODE_ROOT = Path(__file__).resolve().parents[1]
 ROOT = Path(os.environ.get("FDPOSE_ROOT", CODE_ROOT)).resolve()
-sys.path.insert(0, str(CODE_ROOT / "src"))
-from fdonpose.adapters.foundationpose import render_depth
-from fdonpose.adapters.ros2 import PosePublisher
-from fdonpose.application.registration import RejectedMask, prepare_registration
-from fdonpose.application.tracking import TrackingSession
-from fdonpose.application.validation import validate_pose as validate_pose_result
-from fdonpose.domain.geometry import box_in_view, projected_box
+sys.path.insert(0, str(CODE_ROOT / "fdpose_ws/src/fdpose_perception"))
+from fdpose_perception.adapters.foundationpose import render_depth
+from fdpose_perception.adapters.ros2 import PosePublisher
+from fdpose_perception.pipeline import RejectedMask, TrackingSession, prepare_registration
+from fdpose_perception.validation import validate_pose as validate_pose_result
+from fdpose_perception.geometry import box_in_view, projected_box
 
 
 CHECK_PERIOD_S = 0.6

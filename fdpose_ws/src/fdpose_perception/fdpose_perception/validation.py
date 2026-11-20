@@ -1,6 +1,6 @@
 """Pose validation shared by live tracking and recorded-data replay."""
 
-from fdonpose.domain.geometry import box_iou, projected_box
+from fdpose_perception.geometry import box_iou, projected_box
 
 
 def validate_pose(corners, pose, detection_box, measured_depth, K, render_depth,

@@ -3,14 +3,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'fdpose_ws/src/fdpose_perception'))
 try:
     import cv2
     import numpy as np
 except ModuleNotFoundError:
     np = None
 if np is not None:
-    from fdonpose.application.registration import RejectedMask, prepare_registration
+    from fdpose_perception.pipeline import RejectedMask, prepare_registration
 
 
 @unittest.skipIf(np is None, 'Requires OpenCV and NumPy')
