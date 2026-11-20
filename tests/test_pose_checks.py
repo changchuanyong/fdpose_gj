@@ -11,7 +11,7 @@ except ModuleNotFoundError:
     np = None
 
 if np is not None:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "fdpose_ws/src/fdpose_perception"))
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src/fdpose_perception"))
     from fdpose_perception.validation import depth_alignment, pose_delta
 
 

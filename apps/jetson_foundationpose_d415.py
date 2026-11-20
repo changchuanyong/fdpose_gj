@@ -17,8 +17,8 @@ import numpy as np
 
 CODE_ROOT = Path(__file__).resolve().parents[1]
 ROOT = Path(os.environ.get("FDPOSE_ROOT", CODE_ROOT)).resolve()
-sys.path.insert(0, str(CODE_ROOT / "fdpose_ws/src/fdpose_perception"))
-sys.path.insert(0, str(CODE_ROOT / "fdpose_ws/src/fdpose_camera"))
+sys.path.insert(0, str(CODE_ROOT / "src/fdpose_perception"))
+sys.path.insert(0, str(CODE_ROOT / "src/fdpose_camera"))
 from fdpose_camera.rgbd import open_d415
 from fdpose_perception.adapters.detector import Sam2Segmenter, TargetDetector
 from fdpose_perception.adapters.foundationpose import draw_pose, render_depth

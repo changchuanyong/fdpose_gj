@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "fdpose_ws/src/fdpose_perception"))
+sys.path.insert(0, str(ROOT / "src/fdpose_perception"))
 
 try:
     import cv2  # noqa: F401

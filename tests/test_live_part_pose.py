@@ -15,8 +15,8 @@ except ModuleNotFoundError:
 if np is not None:
     _root = Path(__file__).resolve().parents[1]
     with patch.object(sys, "path", [str(_root / "apps"),
-                                    str(_root / "fdpose_ws/src/fdpose_perception"),
-                                    str(_root / "fdpose_ws/src/fdpose_camera"), *sys.path]):
+                                    str(_root / "src/fdpose_perception"),
+                                    str(_root / "src/fdpose_camera"), *sys.path]):
         from jetson_foundationpose_d415 import load_cad_from_target, parse_args
         from fdpose_camera.orbbec_ros import OrbbecRosSource, PairBuffer, aligned_calibration, decode_pair, stamp_ns
         from fdpose_camera.rgbd import open_d415

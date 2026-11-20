@@ -11,8 +11,8 @@ import sys
 from types import SimpleNamespace
 
 ROOT = Path(os.environ.get("FDPOSE_ROOT", Path.cwd())).resolve()
-sys.path.insert(0, str(ROOT / "fdpose_ws/src/fdpose_perception"))
-sys.path.insert(0, str(ROOT / "fdpose_ws/src/fdpose_camera"))
+sys.path.insert(0, str(ROOT / "src/fdpose_perception"))
+sys.path.insert(0, str(ROOT / "src/fdpose_camera"))
 
 import numpy as np
 

@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "fdpose_ws/src/fdpose_perception"))
+sys.path.insert(0, str(ROOT / "src/fdpose_perception"))
 
 try:
     import numpy as np

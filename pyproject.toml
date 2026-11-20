@@ -3,7 +3,7 @@
 [tool.ruff]
 target-version = "py310"
 line-length = 100
-extend-exclude = ["third_party", "artifacts", ".cache", ".runtime"]
+extend-exclude = ["third_party", "artifacts", ".cache", ".runtime", "build", "install", "log"]
 
 # 只查语法级错误（未定义名、语法、无效比较），风格问题不进 CI。
 [tool.ruff.lint]

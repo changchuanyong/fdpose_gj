@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch, sentinel
 
 class DriftReplayTest(unittest.TestCase):
     def test_detection_box_uses_bgr_and_handles_missing_target(self):
-        script = Path(__file__).resolve().parents[1] / "fdpose_ws/src/fdpose_tools/fdpose_tools/replay_drift.py"
+        script = Path(__file__).resolve().parents[1] / "src/fdpose_tools/fdpose_tools/replay_drift.py"
         deps = {name: MagicMock() for name in ("cv2", "numpy", "torch", "trimesh", "estimater")}
         with patch.dict(sys.modules, deps), patch.object(sys, "path", sys.path.copy()):
             detect_box = runpy.run_path(str(script))["detect_box"]

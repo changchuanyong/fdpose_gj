@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'fdpose_ws/src/fdpose_perception'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src/fdpose_perception'))
 try:
     import cv2
     import numpy as np

@@ -27,9 +27,9 @@ def generate_launch_description():
     root = LaunchConfiguration("project_root")
     python = LaunchConfiguration("python")
     namespace = LaunchConfiguration("camera_namespace")
-    camera_entry = PathJoinSubstitution([root, "fdpose_ws", "src", "fdpose_camera",
+    camera_entry = PathJoinSubstitution([root, "src", "fdpose_camera",
                                          "fdpose_camera", "d415_node.py"])
-    node_entry = PathJoinSubstitution([root, "fdpose_ws", "src", "fdpose_perception",
+    node_entry = PathJoinSubstitution([root, "src", "fdpose_perception",
                                        "fdpose_perception", "node.py"])
     common = {"cwd": root, "additional_env": {"FDPOSE_ROOT": root}, "output": "screen"}
     return LaunchDescription(arguments + [

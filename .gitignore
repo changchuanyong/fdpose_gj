@@ -13,9 +13,9 @@ venv/
 .ruff_cache/
 
 # colcon 构建输出
-fdpose_ws/build/
-fdpose_ws/install/
-fdpose_ws/log/
+build/
+install/
+log/
 
 # 运行时资源（体积大，不随仓库分发）
 weights/

@@ -23,7 +23,7 @@ def generate_launch_description():
         DeclareLaunchArgument("frames", default_value="0"),
     ]
     root = LaunchConfiguration("project_root")
-    entry = PathJoinSubstitution([root, "fdpose_ws", "src", "fdpose_perception",
+    entry = PathJoinSubstitution([root, "src", "fdpose_perception",
                                   "fdpose_perception", "node.py"])
     return LaunchDescription(arguments + [
         ExecuteProcess(

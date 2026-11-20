@@ -66,7 +66,7 @@ D415 结果保存在 `artifacts/d415-live-*`，Gemini 结果保存在 `artifacts
 | `summary.json` | 首帧注册耗时、实际跟踪帧率和恢复、重置次数 |
 | `drift/<帧号>/` | 复核失配时的前后 RGB-D、内参、候选/恢复位姿及验证指标 |
 
-可用 `fdpose_ws/src/fdpose_tools/fdpose_tools/replay_drift.py <漂移目录> --output <结果.json>` 回放同一段输入；默认在原生分辨率和 640 像素宽度下分别跟踪、复核并计时。
+可用 `src/fdpose_tools/fdpose_tools/replay_drift.py <漂移目录> --output <结果.json>` 回放同一段输入；默认在原生分辨率和 640 像素宽度下分别跟踪、复核并计时。
 
 ## 实测结果
 
@@ -83,7 +83,7 @@ D415 结果保存在 `artifacts/d415-live-*`，Gemini 结果保存在 `artifacts
 
 ## 文档与目录
 
-- [ROS 2 Humble 启动与位姿话题](fdpose_ws/src/fdpose_bringup/README.md) · 包构建、启动参数、光学坐标系和时间戳
+- [ROS 2 Humble 启动与位姿话题](src/fdpose_bringup/README.md) · 包构建、启动参数、光学坐标系和时间戳
 
 - [Jetson 安装与验证](docs/jetson_setup.md) · 从零部署、固定版本、平台问题和官方样例复现
 - [充电口离线回放](docs/charging_replay.md) · 从 `robot-ev-charging` 数据记录运行 YOLO、SAM2 和 FoundationPose
@@ -93,7 +93,7 @@ D415 结果保存在 `artifacts/d415-live-*`，Gemini 结果保存在 `artifacts
 - [文档索引](docs/index.md) · [上游归属与许可](NOTICE.md)
 
 ```text
-fdpose_ws/src/
+src/
   fdpose_camera/      D415 与 Gemini RGB-D 接入 · D415 发布节点
   fdpose_perception/  几何 · 流程 · 验证 · 记录 · 适配层 · 无头 ROS 节点
   fdpose_bringup/     组合启动（CLI / 节点 / D415）

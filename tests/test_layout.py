@@ -8,10 +8,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# 绕过的目录：上游源码、产物、缓存
-SKIP_TOP = {"third_party", ".git", "artifacts", ".cache", ".runtime"}
-# colcon 输出目录里是源码副本，不参与布局检查
-SKIP_WS = {("fdpose_ws", "build"), ("fdpose_ws", "install"), ("fdpose_ws", "log")}
+# 绕过的目录：上游源码、产物、缓存、colcon 输出
+SKIP_TOP = {"third_party", ".git", "artifacts", ".cache", ".runtime", "build", "install", "log"}
 
 REQUIRED = (
     "README.md",
@@ -31,27 +29,27 @@ REQUIRED = (
     "patches/README.md",
     "patches/foundationpose-windows.patch",
     "apps/jetson_foundationpose_d415.py",
-    "fdpose_ws/src/fdpose_perception/setup.py",
-    "fdpose_ws/src/fdpose_perception/package.xml",
-    "fdpose_ws/src/fdpose_perception/fdpose_perception/geometry.py",
-    "fdpose_ws/src/fdpose_perception/fdpose_perception/pipeline.py",
-    "fdpose_ws/src/fdpose_perception/fdpose_perception/recording.py",
-    "fdpose_ws/src/fdpose_perception/fdpose_perception/node.py",
-    "fdpose_ws/src/fdpose_perception/fdpose_perception/validation.py",
-    "fdpose_ws/src/fdpose_perception/fdpose_perception/adapters/foundationpose.py",
-    "fdpose_ws/src/fdpose_perception/fdpose_perception/adapters/ros2.py",
-    "fdpose_ws/src/fdpose_perception/fdpose_perception/adapters/detector.py",
-    "fdpose_ws/src/fdpose_perception/fdpose_perception/preview.py",
-    "fdpose_ws/src/fdpose_camera/package.xml",
-    "fdpose_ws/src/fdpose_camera/fdpose_camera/rgbd.py",
-    "fdpose_ws/src/fdpose_camera/fdpose_camera/orbbec_ros.py",
-    "fdpose_ws/src/fdpose_camera/fdpose_camera/d415_node.py",
-    "fdpose_ws/src/fdpose_tools/package.xml",
-    "fdpose_ws/src/fdpose_tools/fdpose_tools/replay_drift.py",
-    "fdpose_ws/src/fdpose_bringup/launch/fdpose_d415.launch.py",
-    "fdpose_ws/src/fdpose_bringup/package.xml",
-    "fdpose_ws/src/fdpose_bringup/launch/fdpose_live.launch.py",
-    "fdpose_ws/src/fdpose_bringup/launch/fdpose_node.launch.py",
+    "src/fdpose_perception/setup.py",
+    "src/fdpose_perception/package.xml",
+    "src/fdpose_perception/fdpose_perception/geometry.py",
+    "src/fdpose_perception/fdpose_perception/pipeline.py",
+    "src/fdpose_perception/fdpose_perception/recording.py",
+    "src/fdpose_perception/fdpose_perception/node.py",
+    "src/fdpose_perception/fdpose_perception/validation.py",
+    "src/fdpose_perception/fdpose_perception/adapters/foundationpose.py",
+    "src/fdpose_perception/fdpose_perception/adapters/ros2.py",
+    "src/fdpose_perception/fdpose_perception/adapters/detector.py",
+    "src/fdpose_perception/fdpose_perception/preview.py",
+    "src/fdpose_camera/package.xml",
+    "src/fdpose_camera/fdpose_camera/rgbd.py",
+    "src/fdpose_camera/fdpose_camera/orbbec_ros.py",
+    "src/fdpose_camera/fdpose_camera/d415_node.py",
+    "src/fdpose_tools/package.xml",
+    "src/fdpose_tools/fdpose_tools/replay_drift.py",
+    "src/fdpose_bringup/launch/fdpose_d415.launch.py",
+    "src/fdpose_bringup/package.xml",
+    "src/fdpose_bringup/launch/fdpose_live.launch.py",
+    "src/fdpose_bringup/launch/fdpose_node.launch.py",
     "scripts/run_d415.sh",
     "scripts/run_330s.sh",
     "scripts/setup/jetson_setup.sh",
@@ -81,7 +79,7 @@ class LayoutTest(unittest.TestCase):
         problems = []
         for path in sorted(ROOT.rglob("*.py")):
             rel = path.relative_to(ROOT)
-            if rel.parts[0] in SKIP_TOP or rel.parts[:2] in SKIP_WS or "__pycache__" in rel.parts:
+            if rel.parts[0] in SKIP_TOP or "__pycache__" in rel.parts:
                 continue
             depth = len(rel.parts) - 1
             text = path.read_text(encoding="utf-8", errors="replace")
@@ -97,7 +95,7 @@ class LayoutTest(unittest.TestCase):
         for pattern in ("*.py", "*.md", "*.sh"):
             for path in ROOT.rglob(pattern):
                 rel = path.relative_to(ROOT)
-                if rel.parts[0] in SKIP_TOP or rel.parts[:2] in SKIP_WS or "__pycache__" in rel.parts:
+                if rel.parts[0] in SKIP_TOP or "__pycache__" in rel.parts:
                     continue
                 text = path.read_text(encoding="utf-8", errors="replace")
                 if legacy in text:

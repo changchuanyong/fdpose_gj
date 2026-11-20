@@ -13,8 +13,8 @@ import torch
 import trimesh
 
 
-PROJECT = Path(__file__).resolve().parents[4]
-sys.path.insert(0, str(PROJECT / "fdpose_ws/src/fdpose_perception"))
+PROJECT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(PROJECT / "src/fdpose_perception"))
 sys.path.insert(0, str(PROJECT / "third_party/FoundationPose"))
 from estimater import FoundationPose
 from fdpose_perception.adapters.foundationpose import render_depth
