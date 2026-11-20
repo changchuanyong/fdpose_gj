@@ -5,7 +5,7 @@
 ```bash
 source /opt/ros/humble/setup.bash
 export FDPOSE_ROOT="$PWD"
-cd ros2_ws
+cd fdpose_ws
 colcon build --base-paths src --packages-up-to fdpose_bringup
 source install/local_setup.bash
 ros2 launch fdpose_bringup fdpose_live.launch.py --show-args
