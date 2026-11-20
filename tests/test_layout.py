@@ -35,6 +35,7 @@ REQUIRED = (
     "fdpose_ws/src/fdpose_perception/package.xml",
     "fdpose_ws/src/fdpose_perception/fdpose_perception/geometry.py",
     "fdpose_ws/src/fdpose_perception/fdpose_perception/pipeline.py",
+    "fdpose_ws/src/fdpose_perception/fdpose_perception/recording.py",
     "fdpose_ws/src/fdpose_perception/fdpose_perception/validation.py",
     "fdpose_ws/src/fdpose_perception/fdpose_perception/adapters/foundationpose.py",
     "fdpose_ws/src/fdpose_perception/fdpose_perception/adapters/ros2.py",

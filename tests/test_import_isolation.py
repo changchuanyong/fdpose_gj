@@ -20,6 +20,7 @@ except ModuleNotFoundError:
 CORE_MODULES = (
     "fdpose_perception.geometry",
     "fdpose_perception.pipeline",
+    "fdpose_perception.recording",
     "fdpose_perception.validation",
     "fdpose_perception.preview",
     "fdpose_perception.adapters.foundationpose",

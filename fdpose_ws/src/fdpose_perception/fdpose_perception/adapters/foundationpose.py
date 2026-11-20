@@ -12,3 +12,27 @@ def render_depth(estimator, K, depth):
             mesh_tensors=estimator.mesh_tensors, output_size=depth.shape,
         )
     return rendered[0].detach().cpu().numpy()
+
+
+def draw_pose(K, bgr_frame, cad_pose, target_pose, mesh_bounds):
+    """Overlay the 3D bounding box and target XYZ axes on a BGR frame."""
+    import numpy as np
+    from estimater import draw_posed_3d_box, draw_xyz_axis
+
+    from fdpose_perception.geometry import projected_box
+
+    boxed = draw_posed_3d_box(K, bgr_frame, cad_pose, mesh_bounds)
+    scale = 0.04
+    axes = np.vstack((np.zeros((1, 3)), np.eye(3) * scale))
+    bounds = projected_box(K, axes, target_pose)
+    if bounds is None:
+        return boxed
+    height, width = boxed.shape[:2]
+    x0, y0 = np.maximum(np.floor(bounds[:2]).astype(int) - 4, 0)
+    x1, y1 = np.minimum(np.ceil(bounds[2:]).astype(int) + 5, (width, height))
+    if x1 > x0 and y1 > y0:
+        local_K = K.copy()
+        local_K[:2, 2] -= [x0, y0]
+        crop = boxed[y0:y1, x0:x1]
+        crop[:] = draw_xyz_axis(crop, target_pose, scale=scale, K=local_K)
+    return boxed
