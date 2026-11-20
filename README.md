@@ -66,7 +66,7 @@ D415 结果保存在 `artifacts/d415-live-*`，Gemini 结果保存在 `artifacts
 | `summary.json` | 首帧注册耗时、实际跟踪帧率和恢复、重置次数 |
 | `drift/<帧号>/` | 复核失配时的前后 RGB-D、内参、候选/恢复位姿及验证指标 |
 
-可用 `scripts/eval/replay_drift.py <漂移目录> --output <结果.json>` 回放同一段输入；默认在原生分辨率和 640 像素宽度下分别跟踪、复核并计时。
+可用 `fdpose_ws/src/fdpose_tools/fdpose_tools/replay_drift.py <漂移目录> --output <结果.json>` 回放同一段输入；默认在原生分辨率和 640 像素宽度下分别跟踪、复核并计时。
 
 ## 实测结果
 
@@ -93,10 +93,13 @@ D415 结果保存在 `artifacts/d415-live-*`，Gemini 结果保存在 `artifacts
 - [文档索引](docs/index.md) · [上游归属与许可](NOTICE.md)
 
 ```text
-src/fdonpose/ domain/几何 · application/跟踪与验证流程 · adapters/FoundationPose 渲染适配
-apps/        实时入口、相机及显示集成（迁移期间保持现有启动方式）
-fdpose_ws/src/ fdpose_perception 安装感知程序 · fdpose_bringup 组合启动
-scripts/     setup/ 部署 · pipeline/ 回放 · eval/ 评估 · probes/ 环境探针
+fdpose_ws/src/
+  fdpose_camera/      D415 与 Gemini RGB-D 接入 · D415 发布节点
+  fdpose_perception/  几何 · 流程 · 验证 · 记录 · 适配层 · 无头 ROS 节点
+  fdpose_bringup/     组合启动（CLI / 节点 / D415）
+  fdpose_tools/       漂移回放与离线评估
+apps/        实时 CLI 入口与桌面预览（薄前端，共用 PosePipeline）
+scripts/     setup/ 部署 · pipeline/ 采集重建 · eval/ 评估 · probes/ 环境探针
 config/      运行时约束、上游版本和几何配置
 assets/      mesh/ 网格模型 · print/ 打印件
 docs/        部署、流程和历史记录

@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT / "fdpose_ws/src/fdpose_camera"))
 
 import numpy as np
 
-from fdpose_camera.orbbec_ros import OrbbecRosSource
+from fdpose_camera.orbbec_ros import OrbbecRosSource, RosRgbdSource
 from fdpose_perception.adapters.detector import Sam2Segmenter, TargetDetector
 from fdpose_perception.adapters.foundationpose import draw_pose, render_depth
 from fdpose_perception.adapters.ros2 import rotation_matrix_to_quaternion
@@ -39,6 +39,7 @@ def parse_args(argv=None):
     parser.add_argument("--class-id", type=int, default=0)
     parser.add_argument("--mask-backend", choices=("sam2", "yolo-seg"), default="sam2")
     parser.add_argument("--sam2-checkpoint", type=Path, default=ROOT / "weights/sam2.1_hiera_small.pt")
+    parser.add_argument("--camera", choices=("gemini", "d415"), default="gemini")
     parser.add_argument("--camera-namespace", default="/gemini")
     parser.add_argument("--serial", required=True)
     parser.add_argument("--output", type=Path, required=True)
@@ -103,7 +104,10 @@ def main():
     executor.add_node(node)
     publisher = node.create_publisher(PoseStamped, args.pose_topic, 10)
     try:
-        source = OrbbecRosSource(node, executor, args.serial, args.camera_namespace)
+        if args.camera == "gemini":
+            source = OrbbecRosSource(node, executor, args.serial, args.camera_namespace)
+        else:
+            source = RosRgbdSource(node, executor, args.serial, args.camera_namespace, "RealSense D415")
         K = source.K
         frame_id = source.metadata["frame_id"]
         frame_stamp_ns = 0
@@ -145,7 +149,7 @@ def main():
             draw=lambda bgr, cad_pose, target_pose: draw_pose(K, bgr, cad_pose, target_pose, mesh.bounds),
             interactive=False, closed=lambda: not rclpy.ok())
         pipeline.run(ui, recorder, args.frames)
-        summary = {"camera_serial": source.metadata["serial"], "camera_backend": "orbbec-ros",
+        summary = {"camera_serial": source.metadata["serial"], "camera_backend": args.camera,
                    "camera_metadata": source.metadata, "resolution": source.metadata["rgb_resolution"],
                    "initialization_mask": "SAM2.1_hiera_small" if segmenter else "yolo-seg",
                    "class_id": args.class_id, "mesh_units": args.mesh_units,

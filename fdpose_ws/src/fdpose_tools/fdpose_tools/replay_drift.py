@@ -13,7 +13,7 @@ import torch
 import trimesh
 
 
-PROJECT = Path(__file__).resolve().parents[2]
+PROJECT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(PROJECT / "fdpose_ws/src/fdpose_perception"))
 sys.path.insert(0, str(PROJECT / "third_party/FoundationPose"))
 from estimater import FoundationPose
