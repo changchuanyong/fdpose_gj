@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
-import json
-import os
 from pathlib import Path
 import sys
-import traceback
+
+from probe_report import checked_at_utc, run_probe
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -81,28 +79,12 @@ def main() -> int:
         help="FoundationPose checkout that owns mycpp/build (default: this repo's third_party copy).",
     )
     args = parser.parse_args()
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    dll_handle = None
-    if os.name == "nt":
-        dll_handle = os.add_dll_directory(str(Path(sys.prefix) / "Library/bin"))
-    with args.output.open("x", encoding="utf-8") as handle:
-        report = {
-            "component": args.component,
-            "python": sys.executable,
-            "checked_at_utc": datetime.now(timezone.utc).isoformat(),
-            "passed": False,
-        }
-        try:
-            report.update(check(args.component, args.foundationpose_dir))
-            report["passed"] = True
-        except Exception as exc:
-            report.update(error=str(exc), error_type=type(exc).__name__, traceback=traceback.format_exc())
-        json.dump(report, handle, ensure_ascii=False, indent=2)
-        handle.write("\n")
-    if dll_handle:
-        dll_handle.close()
-    print(json.dumps(report, ensure_ascii=True, indent=2))
-    return 0 if report["passed"] else 1
+    return run_probe(
+        args.output,
+        {"component": args.component, "python": sys.executable,
+         "checked_at_utc": checked_at_utc(), "passed": False},
+        lambda: check(args.component, args.foundationpose_dir),
+        error_keys=("error", "error_type", "traceback"), dll_directory=True)
 
 
 if __name__ == "__main__":

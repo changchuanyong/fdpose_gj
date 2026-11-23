@@ -17,15 +17,10 @@
     "commit": "253ac4fcea7de5f396371124af597e6cc957bfae",
     "path": "third_party/nvdiffrast"
   },
-  "candidate_runtime": {
-    "python": "3.11",
-    "torch": "2.7.1",
-    "torchvision": "0.22.1",
-    "torch_index": "https://download.pytorch.org/whl/cu128",
-    "cuda_toolkit": "12.8",
-    "msvc_toolset": "14.38",
-    "windows_sdk": "10.0.22621.0",
-    "validated": false
-  },
-  "runtime_lock_status": "not_created_before_gpu_validation"
+  "orbbec_camera_ros": {
+    "url": "https://github.com/orbbec/OrbbecSDK_ROS2.git",
+    "version": "1.5.21",
+    "path": "third_party/OrbbecSDK_ROS2",
+    "note": "vendored driver; built into the project install/ by colcon, never into /opt/ros"
+  }
 }

@@ -5,10 +5,12 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import sys
 
 import numpy as np
 
-from rgbd_dataset import load_frame_index, load_metadata, read_png, read_rgbd, write_json
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from fdpose_tools.rgbd_dataset import load_frame_index, load_metadata, read_png, read_rgbd, write_json
 
 
 def make_rgbd(o3d, rgb: np.ndarray, depth: np.ndarray, depth_scale_m: float,

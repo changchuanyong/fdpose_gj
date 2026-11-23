@@ -33,22 +33,24 @@
 从仓库根目录运行。示例中的权重、网格和坐标配置均需用实际零件文件替换，`2` 改成权重内对应的类别 ID。
 
 ```bash
-bash scripts/run_d415.sh \
+bash src/fdpose_bringup/scripts/run_d415.sh \
   --mask-backend yolo-seg --weights weights/part-seg.pt --class-id 2 \
-  --mesh assets/mesh/part.PLY --mesh-units mm --geometry config/geometry/part.json
+  --mesh config/mesh/part.PLY --mesh-units mm --geometry config/geometry/part.json
 ```
 
 切换到 `--mask-backend sam2` 时使用该零件的 YOLO **检测**权重，并准备 SAM2.1 checkpoint。也可用 `--sam2-checkpoint` 指定自定义路径。初次接入时查看输出目录的 `initial_mask.jpg`、位姿叠加图和 `summary.json`。`poses.jsonl` 的 `T_camera_target_m` 表示目标坐标系到相机光学坐标系的变换，平移单位为米。
 
 ## 启动 Gemini 335L / 336L（Jetson）
 
-两款相机共用 [Orbbec ROS 2 适配器](../src/fdpose_camera/fdpose_camera/orbbec_ros.py)，D415 启动不变。Jetson 需要已有的 ROS 2 Humble 与 Orbbec ROS 驱动工作区；此路径**不依赖** `pyorbbecsdk`。录制重建数据的 [Orbbec SDK 采集脚本](../scripts/pipeline/orbbec_capture.py) 是另一条路径。
+两款相机共用 [Orbbec ROS 2 适配器](../src/fdpose_camera/fdpose_camera/orbbec_ros.py)，D415 启动不变。Jetson 需要 ROS 2 Humble；Orbbec 驱动源码 vendored 在 `third_party/OrbbecSDK_ROS2`，**随本项目一起 colcon 构建、只装进项目 `install/`**，不写 `/opt/ros/humble`、也不依赖外部驱动工作区；此路径**不依赖** `pyorbbecsdk`。录制重建数据的 [Orbbec SDK 采集脚本](../src/fdpose_tools/fdpose_tools/orbbec_capture.py) 是另一条路径。
 
-在两个 Jetson 终端分别执行以下环境初始化。将工作区路径和序列号替换成实际值；两个终端的 ROS 域与序列号保持一致。
+若 `third_party/OrbbecSDK_ROS2` 尚未就位：从上游 clone v1.5.21，或从已有编译工作区复制源码 `cp -a <驱动工作区>/src/OrbbecSDK_ROS2 third_party/`，然后按 README 安装节构建。
+
+在两个 Jetson 终端分别执行以下环境初始化。将序列号替换成实际值；两个终端的 ROS 域与序列号保持一致。
 
 ```bash
 source /opt/ros/humble/setup.bash
-source ~/HKR_WorkSpace/ros2_ws/install/local_setup.bash
+source <仓库根>/install/local_setup.bash
 export ROS_DOMAIN_ID=117 ROS_LOCALHOST_ONLY=1
 read -r -p 'Gemini serial: ' SERIAL
 ```
@@ -71,10 +73,10 @@ ros2 launch orbbec_camera gemini_330_series.launch.py \
 ~/venvs/ev-charging-d415-gpu/bin/python -u -B apps/live_pose.py \
   --camera orbbec-ros --camera-namespace /gemini --serial "$SERIAL" \
   --mask-backend yolo-seg --weights weights/part-seg.pt --class-id 0 \
-  --mesh assets/mesh/part.PLY --geometry config/geometry/part.json \
+  --mesh config/mesh/part.PLY --geometry config/geometry/part.json \
   --output "artifacts/gemini-live-$(date +%Y%m%d-%H%M%S)" --frames 60
 ```
 
 适配器查询并核对实际型号和序列号，匹配 15 ms 内的 RGB-D 帧，检查对齐后的分辨率、光学坐标系和内参。驱动已经按设备的深度比例把 `16UC1` 转为毫米，适配器再换算成米，并用同一去畸变映射处理彩色和深度。位姿程序退出后，在相机终端按 Ctrl+C 停止驱动。
 
-2026-11-18 在 Jetson 上用本适配器读取了 Gemini 336L 的 10 组配对帧。输入为 640×480 彩色及 640×400 原始深度，对齐后均为 640×480。设备身份、帧号与时间戳递增、米制深度输出均通过检查；日志与摘要位于 Jetson 的 `~/fdonpose/artifacts/gemini336l-adapter-20261118-165712/`。335L 需按实际流配置验证，两款相机的内参不共用。此次仅验证相机到适配器，不涉及已知距离的深度校验、FoundationPose 实物位姿或长期稳定性。
+2026-11-18 在 Jetson 上用本适配器读取了 Gemini 336L 的 10 组配对帧。输入为 640×480 彩色及 640×400 原始深度，对齐后均为 640×480。设备身份、帧号与时间戳递增、米制深度输出均通过检查；日志与摘要位于 Jetson 的 `~/fdonpose-git/artifacts/gemini336l-adapter-20261118-165712/`。335L 需按实际流配置验证，两款相机的内参不共用。此次仅验证相机到适配器，不涉及已知距离的深度校验、FoundationPose 实物位姿或长期稳定性。

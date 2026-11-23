@@ -5,9 +5,13 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-import time
+import sys
 
-from rgbd_dataset import write_json, write_png
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "fdpose_camera"))
+from fdpose_camera.calibration import rectify_maps
+from fdpose_tools.capture_common import (add_capture_args, capture_loop, require_modules,
+                                         validate_capture_args, warmup)
 
 
 def camera_matrix(intrinsic) -> list[list[float]]:
@@ -81,23 +85,11 @@ def aligned_pair(pipeline, align_filter, ob):
 
 
 def run(args: argparse.Namespace) -> int:
-    if args.frames < 0 or args.warmup < 0:
-        raise ValueError("--frames and --warmup must be nonnegative")
-    if args.interval_s < 0:
-        raise ValueError("--interval-s must be nonnegative")
-    if args.output.exists():
-        raise FileExistsError(f"output already exists: {args.output}")
+    validate_capture_args(args)
+    cv2, np, ob = require_modules(
+        "capture requires OpenCV, NumPy and the official pyorbbecsdk v2 package",
+        "cv2", "numpy", "pyorbbecsdk")
 
-    try:
-        import cv2
-        import numpy as np
-        import pyorbbecsdk as ob
-    except ModuleNotFoundError as exc:
-        raise RuntimeError(
-            "capture requires OpenCV, NumPy and the official pyorbbecsdk v2 package"
-        ) from exc
-
-    context = None
     if args.serial:
         context = ob.Context()
         device = context.query_devices().get_device_by_serial_number(args.serial)
@@ -119,24 +111,20 @@ def run(args: argparse.Namespace) -> int:
     config.set_frame_aggregate_output_mode(ob.OBFrameAggregateOutputMode.FULL_FRAME_REQUIRE)
     pipeline.enable_frame_sync()
     pipeline.start(config)
-    output_created = False
-    index_stream = None
     try:
         align_filter = ob.AlignFilter(align_to_stream=ob.OBStreamType.COLOR_STREAM)
-        for _ in range(args.warmup):
-            deadline = time.monotonic() + 5
-            while aligned_pair(pipeline, align_filter, ob) is None:
-                if time.monotonic() > deadline:
-                    raise TimeoutError("no synchronized Orbbec RGB-D pair during warmup")
+
+        def next_pair():
+            return aligned_pair(pipeline, align_filter, ob)
+
+        warmup(next_pair, args.warmup,
+               lambda: "no synchronized Orbbec RGB-D pair during warmup")
         intrinsic = color_profile.get_intrinsic()
         matrix = camera_matrix(intrinsic)
         coefficients = distortion_coefficients(color_profile.get_distortion())
-        rectify = None
-        if any(abs(value) > 1e-12 for value in coefficients):
-            rectify = cv2.initUndistortRectifyMap(
-                np.asarray(matrix), np.asarray(coefficients), None, np.asarray(matrix),
-                (color_profile.get_width(), color_profile.get_height()), cv2.CV_32FC1,
-            )
+        rectify = rectify_maps(matrix, coefficients,
+                               (color_profile.get_width(), color_profile.get_height()),
+                               zero_tol=1e-12)
         device_info = pipeline.get_device().get_device_info()
         metadata = {
             "schema_version": 1,
@@ -154,78 +142,32 @@ def run(args: argparse.Namespace) -> int:
             "color_profile": profile_description(color_profile),
             "depth_profile": profile_description(depth_profile),
         }
-        count = 0
-        last_saved = 0.0
-        last_pair = time.monotonic()
-        index_stream = None
-        while args.frames == 0 or count < args.frames:
-            pair = aligned_pair(pipeline, align_filter, ob)
-            if pair is None:
-                if time.monotonic() - last_pair > 5:
-                    raise TimeoutError("no synchronized Orbbec RGB-D pair for 5 seconds")
-                continue
-            last_pair = time.monotonic()
-            now = time.monotonic()
-            if count and now - last_saved < args.interval_s:
-                continue
+
+        def decode(pair):
             frames, color_frame, depth_frame = pair
             bgr = decode_color(color_frame, ob, cv2, np)
             raw_depth = decode_depth(depth_frame, ob, np)
-            if rectify is not None:
-                bgr = cv2.remap(bgr, *rectify, cv2.INTER_LINEAR)
-                raw_depth = cv2.remap(raw_depth, *rectify, cv2.INTER_NEAREST)
             scale_m = float(depth_frame.get_depth_scale()) / 1000.0
             if not 0 < scale_m <= 0.001:
                 raise RuntimeError(f"unsupported Orbbec depth scale: {scale_m} m/unit")
             if "depth_scale_m" in metadata and abs(scale_m - metadata["depth_scale_m"]) > 1e-9:
                 raise RuntimeError("Orbbec depth scale changed during capture")
             metadata["depth_scale_m"] = scale_m
-            if not output_created:
-                args.output.mkdir(parents=True, exist_ok=False)
-                write_json(args.output / "metadata.json", metadata)
-                index_stream = (args.output / "frames.jsonl").open("x", encoding="utf-8")
-                output_created = True
-            stem = f"{count:06d}"
-            rgb_name, depth_name = f"frames/{stem}_rgb.png", f"frames/{stem}_depth.png"
-            write_png(args.output / rgb_name, bgr)
-            write_png(args.output / depth_name, raw_depth)
-            record = {
-                "index": count,
-                "rgb": rgb_name,
-                "depth": depth_name,
-                "color_device_time_us": int(color_frame.get_timestamp_us()),
-                "depth_device_time_us": int(depth_frame.get_timestamp_us()),
-                "valid_depth_pixels": int(np.count_nonzero(raw_depth)),
-            }
-            index_stream.write(json.dumps(record, allow_nan=False) + "\n")
-            index_stream.flush()
-            count += 1
-            last_saved = now
-            print(json.dumps({"saved": count, "output": str(args.output),
-                              "valid_depth_pixels": record["valid_depth_pixels"]}), flush=True)
-        if index_stream is not None:
-            index_stream.close()
-        if count == 0:
-            raise RuntimeError("capture ended before any frame was saved")
-        return 0
+            return (bgr, raw_depth, int(color_frame.get_timestamp_us()),
+                    int(depth_frame.get_timestamp_us()))
+
+        return capture_loop(
+            args, metadata=metadata, next_pair=next_pair, decode=decode, rectify=rectify,
+            timeout_message=lambda: "no synchronized Orbbec RGB-D pair for 5 seconds",
+            cv2=cv2, np=np)
     finally:
-        if index_stream is not None and not index_stream.closed:
-            index_stream.close()
         pipeline.stop()
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--serial", help="Orbbec serial number; default selects the only/default device")
-    parser.add_argument("--frames", type=int, default=100, help="0 captures until Ctrl+C")
-    parser.add_argument("--interval-s", type=float, default=0.2)
-    parser.add_argument("--warmup", type=int, default=10)
-    parser.add_argument("--fps", type=int, default=30)
-    parser.add_argument("--color-width", type=int, default=640)
-    parser.add_argument("--color-height", type=int, default=480)
-    parser.add_argument("--depth-width", type=int, default=640)
-    parser.add_argument("--depth-height", type=int, default=400)
+    add_capture_args(parser, depth_height_default=400,
+                     serial_help="Orbbec serial number; default selects the only/default device")
     args = parser.parse_args()
     if min(args.fps, args.color_width, args.color_height, args.depth_width, args.depth_height) <= 0:
         parser.error("stream dimensions and --fps must be positive")

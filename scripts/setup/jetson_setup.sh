@@ -14,11 +14,12 @@
 #   $WORK/config/runtime-jetson.txt
 set -euo pipefail
 
-REPO="${REPO:-$HOME/fdonpose/third_party/FoundationPose}"
+REPO="${REPO:-$HOME/fdonpose-git/third_party/FoundationPose}"
 VENV="${VENV:-$HOME/venvs/foundationpose}"
 WORK="${WORK:-$HOME/foundationpose-deploy}"
 PATCH="${PATCH:-$WORK/foundationpose-windows.patch}"
 REQ="${REQ:-$WORK/config/runtime-jetson.txt}"
+# 与 config/upstream.json 的 foundationpose.commit 一致；staging 阶段先于 venv，无 python/jq 可解析该文件。
 COMMIT="a1b694b83e633c2cb6115b9063d940a687759392"
 TORCH_INDEX="${TORCH_INDEX:-https://pypi.jetson-ai-lab.io/jp6/cu126}"
 TORCH_VERSION="${TORCH_VERSION:-2.9.1}"

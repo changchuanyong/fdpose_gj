@@ -7,33 +7,51 @@ import time
 import cv2
 
 
+class _TkView:
+    """One tkinter window showing a single image; callers choose caption or title."""
+
+    def __init__(self, title, *, waiting=None):
+        import tkinter as tk
+        from PIL import Image, ImageTk
+
+        self.root = tk.Tk()
+        self.root.title(title)
+        self.label = tk.Label(self.root, text=waiting, compound="top") if waiting is not None \
+            else tk.Label(self.root)
+        self.label.pack()
+        self._Image = Image
+        self._PhotoImage = ImageTk.PhotoImage
+        self.photo = None
+
+    def bind_stop(self, callback):
+        self.root.protocol("WM_DELETE_WINDOW", callback)
+        for key in ("<Escape>", "<q>", "<Q>"):
+            self.root.bind(key, lambda _: callback())
+
+    def show(self, rgb, *, caption=None, title=None):
+        if title is not None:
+            self.root.title(title)
+        self.photo = self._PhotoImage(self._Image.fromarray(rgb))
+        self.label.configure(image=self.photo)
+        if caption is not None:
+            self.label.configure(text=caption)
+
+    def destroy(self):
+        self.root.destroy()
+
+
 def _display(title, updates, stopped, stats):
-    import tkinter as tk
-    from PIL import Image, ImageTk
-
-    root = tk.Tk()
-    root.title(f"FoundationPose | {title}")
-    result = tk.Label(root, text="Waiting for pose", compound="top")
-    result.pack()
-    root.protocol("WM_DELETE_WINDOW", stopped.set)
-    for key in ("<Escape>", "<q>", "<Q>"):
-        root.bind(key, lambda _: stopped.set())
-
-    def show(label, rgb):
-        photo = ImageTk.PhotoImage(Image.fromarray(rgb))
-        label.configure(image=photo)
-        label.image = photo
-
+    view = _TkView(f"FoundationPose | {title}", waiting="Waiting for pose")
+    view.bind_stop(stopped.set)
     first = None
     try:
         while not stopped.is_set():
-            root.update()
+            view.root.update()
             try:
                 status, rgb = updates.get_nowait()
             except Empty:
                 continue
-            show(result, rgb)
-            result.configure(text=status)
+            view.show(rgb, caption=status)
             now = time.monotonic()
             if first is None:
                 first = now
@@ -41,7 +59,7 @@ def _display(title, updates, stopped, stats):
                 stats[0] += 1
                 stats[1] = now - first
     finally:
-        root.destroy()
+        view.destroy()
 
 
 class GeminiPreview:
@@ -92,31 +110,28 @@ class PreviewWindow:
     """Show FoundationPose overlays on the Jetson desktop."""
 
     def __init__(self, camera_name):
-        import tkinter as tk
-        from PIL import Image, ImageTk
-
-        self.root = tk.Tk()
         self.title = f"FoundationPose | {camera_name}"
-        self.root.title(self.title)
-        self.label = tk.Label(self.root)
-        self.label.pack()
+        self.view = _TkView(self.title)
+        self.view.bind_stop(self.request_close)
         self.closed = False
-        self.root.protocol("WM_DELETE_WINDOW", self.request_close)
-        for key in ("<Escape>", "<q>", "<Q>"):
-            self.root.bind(key, self.request_close)
-        self.image = Image
-        self.photo_image = ImageTk.PhotoImage
 
     def request_close(self, _event=None):
         self.closed = True
 
     def present(self, bgr, status):
-        self.root.title(f"{self.title} | {status}")
-        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-        self.photo = self.photo_image(self.image.fromarray(rgb))
-        self.label.configure(image=self.photo)
-        self.root.update()
+        self.view.show(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB), title=f"{self.title} | {status}")
+        self.view.root.update()
         return not self.closed
 
     def close(self):
-        self.root.destroy()
+        self.view.destroy()
+
+
+def make_preview(camera_name, *, show, spawned):
+    """Return (live_preview, preview); only the spawned view reports measurements."""
+    if not show:
+        return None, None
+    if spawned:
+        view = GeminiPreview(camera_name)
+        return view, view
+    return None, PreviewWindow(camera_name)

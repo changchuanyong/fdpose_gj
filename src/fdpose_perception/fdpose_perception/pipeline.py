@@ -115,9 +115,8 @@ class PosePipeline:
     draw(bgr, cad_pose, target_pose)->image, interactive (bool), closed()->bool.
     """
 
-    def __init__(self, estimator, session, detector, segment_box, corners, K, validate,
+    def __init__(self, session, detector, segment_box, corners, K, validate,
                  *, init_width, est_refine_iter, mask_backend, check_period_s=0.6):
-        self.estimator = estimator
         self.session = session
         self.detector = detector
         self.segment_box = segment_box
@@ -189,8 +188,8 @@ class PosePipeline:
                                             self.est_refine_iter)
             elapsed = (time.perf_counter() - started) * 1000
             validation = self.validate(initial, candidate.box, candidate.depth, evaluation_K=candidate.K)
-            if self.estimator.pose_last is None or not validation["accepted"]:
-                self.estimator.pose_last = None
+            if self.session.estimator.pose_last is None or not validation["accepted"]:
+                self.session.estimator.pose_last = None
                 status = "FoundationPose pose failed projection/depth validation"
                 ui.emit({"event": "registration_rejected", "validation": validation})
                 continue

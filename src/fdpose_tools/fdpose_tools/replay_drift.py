@@ -1,7 +1,6 @@
 """Replay a saved drift RGB-D pair at native resolution and optional downscaled widths."""
 
 import argparse
-from functools import partial
 import json
 from pathlib import Path
 import sys
@@ -17,11 +16,11 @@ PROJECT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT / "src/fdpose_perception"))
 sys.path.insert(0, str(PROJECT / "third_party/FoundationPose"))
 from estimater import FoundationPose
-from fdpose_perception.adapters.foundationpose import render_depth
+from fdpose_perception.frontend import make_validate
 from fdpose_perception.pipeline import TrackingSession
-from fdpose_perception.validation import validate_pose as validate_pose_result
-from fdpose_perception.validation import depth_alignment, pose_delta
+from fdpose_perception.validation import pose_delta
 from fdpose_perception.adapters.detector import TargetDetector
+from fdpose_perception.jsonio import write_json
 
 
 def detect_box(detector, rgb):
@@ -42,17 +41,10 @@ def scaled_input(rgb, depth, K, width):
     return resized_rgb, resized_depth, resized_K
 
 
-def validate(estimator, pose, detection_box, depth, K):
-    corners = np.asarray(np.meshgrid(*estimator.mesh_ori.bounds.T)).reshape(3, -1).T
-
-    return validate_pose_result(corners, pose, detection_box, depth, K, partial(render_depth, estimator),
-                                depth_alignment)
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", type=Path)
-    parser.add_argument("--mesh", type=Path, default=PROJECT / "assets/mesh/socket_mod.PLY")
+    parser.add_argument("--mesh", type=Path, default=PROJECT / "config/mesh/socket_mod.PLY")
     parser.add_argument("--weights", type=Path, default=PROJECT / "weights/best.pt")
     parser.add_argument("--widths", type=int, nargs="+", default=[1280, 640])
     parser.add_argument("--output", type=Path, required=True)
@@ -80,14 +72,14 @@ def main():
         pose = session.track(current_rgb, current_depth, current_K)
         elapsed_ms = (time.perf_counter() - started) * 1000
         detection_box = detect_box(detector, current_rgb)
-        validation = validate(estimator, pose, detection_box, current_depth, current_K)
+        corners = np.asarray(np.meshgrid(*estimator.mesh_ori.bounds.T)).reshape(3, -1).T
+        validation = make_validate(corners, estimator, current_K)(pose, detection_box, current_depth)
         rows.append({"width": width, "height": current_rgb.shape[0], "track_ms": elapsed_ms,
                      "change_from_before": pose_delta(before_pose, pose), "validation": validation})
         estimator.glctx = None
         del session, estimator
         torch.cuda.empty_cache()
-    args.output.write_text(json.dumps({"source": str(directory), "runs": rows}, indent=2) + "\n",
-                           encoding="utf-8")
+    write_json(args.output, {"source": str(directory), "runs": rows})
     print(json.dumps({"source": str(directory), "runs": rows}), flush=True)
 
 

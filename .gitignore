@@ -9,7 +9,6 @@ third_party/
 .venv/
 venv/
 *.egg-info/
-.pytest_cache/
 .ruff_cache/
 
 # colcon 构建输出

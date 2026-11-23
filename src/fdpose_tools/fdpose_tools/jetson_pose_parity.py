@@ -16,6 +16,9 @@ import sys
 
 import numpy as np
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "fdpose_perception"))
+from fdpose_perception.jsonio import write_json
+
 
 def load_pose(path: Path) -> np.ndarray:
     pose = np.loadtxt(path)
@@ -100,9 +103,7 @@ def main() -> int:
         ),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    with args.output.open("x", encoding="utf-8") as handle:
-        json.dump(report, handle, ensure_ascii=False, indent=2)
-        handle.write("\n")
+    write_json(args.output, report, ensure_ascii=False, exclusive=True)
     print(json.dumps(report["acceptance"], ensure_ascii=True))
     print(f"max translation {report['translation_m']['max']:.6f} m")
     print(f"max rotation    {report['rotation_deg']['max']:.6f} deg")

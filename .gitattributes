@@ -16,4 +16,5 @@
 *.mp4   binary
 *.stl   binary
 *.ply   binary
-*.3mf   binary
+*.STL   binary
+*.PLY   binary

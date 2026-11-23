@@ -1,45 +1,20 @@
 """Launch the headless FoundationPose ROS node (Gemini RGB-D -> PoseStamped)."""
 
-import os
+import sys
 from pathlib import Path
 
-from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from fdpose_common import common_arguments, description, entry_path, pose_flags, process
+
+from launch.substitutions import LaunchConfiguration
 
 
 def generate_launch_description():
-    default_root = os.environ.get("FDPOSE_ROOT", str(Path.home() / "fdonpose-git"))
-    arguments = [
-        DeclareLaunchArgument("project_root", default_value=default_root),
-        DeclareLaunchArgument("python", default_value=str(Path.home() / "venvs/ev-charging-d415-gpu/bin/python")),
-        DeclareLaunchArgument("camera_namespace", default_value="/gemini"),
-        DeclareLaunchArgument("serial"),
-        DeclareLaunchArgument("mesh", default_value="assets/mesh/socket_mod.PLY"),
-        DeclareLaunchArgument("geometry", default_value="config/geometry/socket_openings_ply.json"),
-        DeclareLaunchArgument("weights", default_value="weights/best.pt"),
-        DeclareLaunchArgument("output"),
-        DeclareLaunchArgument("pose_topic", default_value="/fdpose/pose"),
-        DeclareLaunchArgument("frames", default_value="0"),
-    ]
+    arguments = common_arguments(frames="0")
     root = LaunchConfiguration("project_root")
-    entry = PathJoinSubstitution([root, "src", "fdpose_perception",
-                                  "fdpose_perception", "node.py"])
-    return LaunchDescription(arguments + [
-        ExecuteProcess(
-            cmd=[
-                LaunchConfiguration("python"), "-u", entry,
-                "--camera-namespace", LaunchConfiguration("camera_namespace"),
-                "--serial", LaunchConfiguration("serial"),
-                "--mesh", LaunchConfiguration("mesh"),
-                "--geometry", LaunchConfiguration("geometry"),
-                "--weights", LaunchConfiguration("weights"),
-                "--output", LaunchConfiguration("output"),
-                "--pose-topic", LaunchConfiguration("pose_topic"),
-                "--frames", LaunchConfiguration("frames"),
-            ],
-            cwd=root,
-            additional_env={"FDPOSE_ROOT": root},
-            output="screen",
-        )
-    ])
+    entry = entry_path(root, "fdpose_perception", "node.py")
+    flags = pose_flags(LaunchConfiguration("camera_namespace"), LaunchConfiguration("serial"),
+                       LaunchConfiguration("mesh"), LaunchConfiguration("geometry"),
+                       LaunchConfiguration("weights"), LaunchConfiguration("output"),
+                       LaunchConfiguration("pose_topic"), LaunchConfiguration("frames"))
+    return description(arguments, [process(LaunchConfiguration("python"), entry, flags, root)])

@@ -9,9 +9,9 @@ import shutil
 import sys
 import tempfile
 
-from rgbd_dataset import load_frame_index, load_metadata, read_png, write_json, write_png
-
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "src/fdpose_tools"))
+from fdpose_tools.rgbd_dataset import load_frame_index, load_metadata, read_png, write_json, write_png
 
 
 def run(args: argparse.Namespace) -> int:

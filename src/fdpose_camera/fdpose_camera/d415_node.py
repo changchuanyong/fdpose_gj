@@ -41,7 +41,7 @@ def main():
     try:
         with open_d415(args.serial, args.stream_width, args.stream_height, args.fps) as stream:
             K = stream.K
-            distortion = np.asarray(stream.metadata.get("dist_coeffs", []), dtype=float)
+            distortion = np.asarray(stream.metadata["dist_coeffs"], dtype=float)
             width, height = stream.metadata["rgb_resolution"]
             while rclpy.ok():
                 rgb, depth_m, _frame_number, _device_ms = stream.read_frame()

@@ -7,6 +7,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from fdpose_perception.jsonio import write_json
+
 
 class Recorder:
     def __init__(self, output, K, cad_from_target, publish=None):
@@ -27,7 +29,6 @@ class Recorder:
 
     def open(self):
         self.stream = (self.output / "poses.jsonl").open("x", encoding="utf-8")
-        return self
 
     def close(self):
         if self.stream is not None:
@@ -69,6 +70,5 @@ class Recorder:
                     "change_from_confirmed": {"translation_m": change[0], "rotation_deg": change[1]},
                     "rejected_validation": rejected_validation,
                     "recovery_validation": recovery_validation}
-        (directory / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n",
-                                                   encoding="utf-8")
+        write_json(directory / "metadata.json", metadata)
         emit({"event": "drift_rgbd_saved", "path": str(directory)})

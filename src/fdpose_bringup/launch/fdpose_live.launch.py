@@ -1,44 +1,27 @@
 """Launch the existing FoundationPose application with optional ROS pose output."""
 
-import os
+import sys
 from pathlib import Path
 
-from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from fdpose_common import common_arguments, description, process
+
+from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 
 
 def generate_launch_description():
-    default_root = os.environ.get("FDPOSE_ROOT", str(Path.home() / "fdonpose-git"))
-    arguments = [
-        DeclareLaunchArgument("project_root", default_value=default_root),
-        DeclareLaunchArgument("python", default_value=str(Path.home() / "venvs/ev-charging-d415-gpu/bin/python")),
-        DeclareLaunchArgument("camera", default_value="orbbec-ros"),
-        DeclareLaunchArgument("camera_namespace", default_value="/gemini"),
-        DeclareLaunchArgument("serial"),
-        DeclareLaunchArgument("mesh", default_value="assets/mesh/socket_mod.PLY"),
-        DeclareLaunchArgument("geometry", default_value="config/geometry/socket_openings_ply.json"),
-        DeclareLaunchArgument("weights", default_value="weights/best.pt"),
-        DeclareLaunchArgument("output"),
-        DeclareLaunchArgument("pose_topic", default_value="/fdpose/pose"),
-    ]
+    arguments = common_arguments(frames="60")
+    arguments.append(DeclareLaunchArgument("camera", default_value="orbbec-ros"))
     root = LaunchConfiguration("project_root")
     entry = PathJoinSubstitution([root, "apps", "live_pose.py"])
-    return LaunchDescription(arguments + [
-        ExecuteProcess(
-            cmd=[
-                LaunchConfiguration("python"), "-u", entry,
-                "--camera", LaunchConfiguration("camera"),
-                "--camera-namespace", LaunchConfiguration("camera_namespace"),
-                "--serial", LaunchConfiguration("serial"),
-                "--mesh", LaunchConfiguration("mesh"),
-                "--geometry", LaunchConfiguration("geometry"),
-                "--weights", LaunchConfiguration("weights"),
-                "--output", LaunchConfiguration("output"),
-                "--ros-pose-topic", LaunchConfiguration("pose_topic"),
-            ],
-            cwd=root,
-            additional_env={"FDPOSE_ROOT": root},
-            output="screen",
-        )
-    ])
+    flags = ["--camera", LaunchConfiguration("camera"),
+             "--camera-namespace", LaunchConfiguration("camera_namespace"),
+             "--serial", LaunchConfiguration("serial"),
+             "--mesh", LaunchConfiguration("mesh"),
+             "--geometry", LaunchConfiguration("geometry"),
+             "--weights", LaunchConfiguration("weights"),
+             "--output", LaunchConfiguration("output"),
+             "--ros-pose-topic", LaunchConfiguration("pose_topic"),
+             "--frames", LaunchConfiguration("frames")]
+    return description(arguments, [process(LaunchConfiguration("python"), entry, flags, root)])

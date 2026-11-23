@@ -53,7 +53,7 @@ python -c "import pyorbbecsdk; print('Orbbec SDK OK')"
 在项目根目录运行：
 
 ```bash
-python scripts/pipeline/orbbec_capture.py \
+python src/fdpose_tools/fdpose_tools/orbbec_capture.py \
   --output artifacts/elbow-rgbd-sample \
   --frames 10 \
   --interval-s 0.5
@@ -62,7 +62,7 @@ python scripts/pipeline/orbbec_capture.py \
 Windows CMD 或 PowerShell 可以写成一行：
 
 ```powershell
-python scripts/pipeline/orbbec_capture.py --output artifacts/elbow-rgbd-sample --frames 10 --interval-s 0.5
+python src/fdpose_tools/fdpose_tools/orbbec_capture.py --output artifacts/elbow-rgbd-sample --frames 10 --interval-s 0.5
 ```
 
 样例用于检查取流、RGB／深度对齐和深度完整性，不用于完整重建。
@@ -72,7 +72,7 @@ python scripts/pipeline/orbbec_capture.py --output artifacts/elbow-rgbd-sample -
 样例正常后，换一个新的输出目录：
 
 ```bash
-python scripts/pipeline/orbbec_capture.py \
+python src/fdpose_tools/fdpose_tools/orbbec_capture.py \
   --output artifacts/elbow-rgbd-001 \
   --frames 100 \
   --interval-s 0.2
@@ -116,7 +116,7 @@ artifacts/elbow-rgbd-001/
 没有 335L 时可以用 RealSense D415 采集，输出目录格式与上面完全一致，后续掩膜和重建步骤不变。依赖 `pyrealsense2`（仓库实时位姿程序已在用），取流方式与 `apps/live_pose.py` 一致：彩色 rgb8、深度 z16、`rs.align` 对齐到彩色、brown_conrady 去畸变。
 
 ```bash
-python scripts/pipeline/realsense_capture.py \
+python src/fdpose_tools/fdpose_tools/realsense_capture.py \
   --output artifacts/elbow-rgbd-d415-001 \
   --frames 100 \
   --interval-s 0.2
@@ -149,7 +149,7 @@ artifacts/elbow-rgbd-001/masks/
 SAM2 视频传播可批量生成：选一帧管件尽量完整的帧给框提示，向前向后传播整段序列（需要 CUDA 与 `weights/sam2.1_hiera_small.pt`）：
 
 ```bash
-python scripts/pipeline/make_masks_sam2.py \
+python src/fdpose_tools/fdpose_tools/make_masks_sam2.py \
   --capture artifacts/elbow-rgbd-001 \
   --output artifacts/elbow-rgbd-001/masks \
   --prompt-frame 250 --box 240 210 437 479
@@ -162,16 +162,16 @@ python scripts/pipeline/make_masks_sam2.py \
 ## 五、重建三维网格
 
 ```bash
-python scripts/pipeline/reconstruct_rgbd.py \
+python src/fdpose_tools/fdpose_tools/reconstruct_rgbd.py \
   --capture artifacts/elbow-rgbd-001 \
   --mask-dir artifacts/elbow-rgbd-001/masks \
-  --output assets/mesh/elbow_dn50.PLY
+  --output config/mesh/elbow_dn50.PLY
 ```
 
 成功后得到：
 
-- `assets/mesh/elbow_dn50.PLY`：三维网格，单位为**毫米**，坐标系暂时是第一帧相机坐标系。
-- `assets/mesh/elbow_dn50.json`：融合帧数、配准失败帧、深度比例和网格包围盒。
+- `config/mesh/elbow_dn50.PLY`：三维网格，单位为**毫米**，坐标系暂时是第一帧相机坐标系。
+- `config/mesh/elbow_dn50.json`：融合帧数、配准失败帧、深度比例和网格包围盒。
 
 程序对相邻完整 RGB-D 帧做里程计，再将掩膜内的管件深度融合为 TSDF 网格。默认 1.5 mm 体素只是 dn50 管件的初始参数，不代表重建精度。Open3D 0.20 的 ScalableTSDFVolume 有深度缩放回归（融合结果为空网格），脚本改用首帧管件中心居中的 UniformTSDFVolume；`--volume-length-m` 设定积分立方体边长（默认 1 m），分辨率由体素尺寸导出。每步里程计另用掩膜点云对齐残差校验（`--odometry-max-residual-mm`，默认 10 mm），超差即跳帧并保留前一锚点。手持采集必须慢到相邻帧无运动模糊（建议 ≤0.1 m/s、整段 20–30 s 以上）：快动会同时造成深度大面积缺失与里程计崩溃，残差门控会拒掉绝大多数帧，可用帧不足则重建失败。
 
@@ -193,6 +193,6 @@ python scripts/pipeline/reconstruct_rgbd.py \
 
 - 根据选定的承口中心和插入方向建立新的 `cad_to_target` 几何配置。
 - 将 YOLO 检测权重换成该管件的权重，或先用手工框做离线验证。
-- 将实时取流从 RealSense SDK 适配到 Orbbec SDK，并用 335L 检查对齐、深度比例和投影。
+- Orbbec 实时取流已由 `fdpose_camera/orbbec_ros.py` 实现；仍需用 335L 检查对齐、深度比例和投影（两款相机内参不共用）。
 
 目前不能仅凭一张照片或未采集的数据声称已经得到可用的三维模型。

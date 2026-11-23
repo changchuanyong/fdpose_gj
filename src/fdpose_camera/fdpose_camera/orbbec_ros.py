@@ -6,6 +6,7 @@ import time
 import cv2
 import numpy as np
 
+from fdpose_camera.calibration import rectify_maps
 from fdpose_camera.rgbd import RGBDStream
 
 
@@ -110,7 +111,7 @@ class RosRgbdSource:
         K, distortion = aligned_calibration(*first)
         w, h = first[0].width, first[0].height
         frame_id = first[0].header.frame_id
-        self._rectify = cv2.initUndistortRectifyMap(K, distortion, None, K, (w, h), cv2.CV_32FC1) if np.any(distortion) else None
+        self._rectify = rectify_maps(K, distortion, (w, h))
         self._w, self._h, self._frame_id = w, h, frame_id
         self._K, self._distortion = K, distortion
         self._first = first

@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
-import json
 from pathlib import Path
 import sys
-import traceback
+
+from probe_report import checked_at_utc, run_probe
 
 
 def check(expect_torch: str, expect_torchvision: str) -> dict:
@@ -50,30 +49,16 @@ def check(expect_torch: str, expect_torchvision: str) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--expect-torch", default="2.7.1+cu128", help="Expected torch.__version__ string.")
+    parser.add_argument("--expect-torch", default="2.9.1", help="Expected torch.__version__ string.")
     parser.add_argument(
-        "--expect-torchvision", default="0.22.1+cu128", help="Expected torchvision.__version__ string."
+        "--expect-torchvision", default="0.24.1", help="Expected torchvision.__version__ string."
     )
     args = parser.parse_args()
-    # Refuse to run if its report would overwrite previous validation evidence.
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    with args.output.open("x", encoding="utf-8") as handle:
-        report = {
-            "checked_at_utc": datetime.now(timezone.utc).isoformat(),
-            "python": sys.executable,
-            "passed": False,
-        }
-        try:
-            report.update(check(args.expect_torch, args.expect_torchvision))
-            report["passed"] = True
-        except Exception as exc:
-            report["error_type"] = type(exc).__name__
-            report["error"] = str(exc)
-            report["traceback"] = traceback.format_exc()
-        json.dump(report, handle, ensure_ascii=False, indent=2)
-        handle.write("\n")
-    print(json.dumps(report, ensure_ascii=True, indent=2))
-    return 0 if report["passed"] else 1
+    return run_probe(
+        args.output,
+        {"checked_at_utc": checked_at_utc(), "python": sys.executable, "passed": False},
+        lambda: check(args.expect_torch, args.expect_torchvision),
+        error_keys=("error_type", "error", "traceback"))
 
 
 if __name__ == "__main__":

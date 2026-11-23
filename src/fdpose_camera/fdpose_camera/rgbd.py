@@ -7,6 +7,8 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
+from fdpose_camera.calibration import rectify_maps
+
 
 @dataclass
 class RGBDStream:
@@ -43,12 +45,10 @@ def open_d415(serial, width, height, fps=30):
             raise RuntimeError(f"Invalid RealSense depth scale {scale}")
         coefficients = np.array(intr.coeffs, dtype=float)
         rectify = None
-        if intr.model != rs.distortion.none and np.any(coefficients != 0):
-            if intr.model != rs.distortion.brown_conrady:
+        if intr.model != rs.distortion.none:
+            if np.any(coefficients != 0) and intr.model != rs.distortion.brown_conrady:
                 raise RuntimeError(f"Unsupported color distortion model {intr.model}")
-            rectify = cv2.initUndistortRectifyMap(
-                K, coefficients, None, K, (intr.width, intr.height), cv2.CV_32FC1,
-            )
+            rectify = rectify_maps(K, coefficients, (intr.width, intr.height))
         align = rs.align(rs.stream.color)
         metadata = {"camera": name, "serial": actual_serial, "color_fps": color_profile.fps(),
                     "rgb_resolution": [intr.width, intr.height],

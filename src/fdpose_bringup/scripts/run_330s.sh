@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.."
 
 source /opt/ros/humble/setup.bash
-source "$HOME/HKR_WorkSpace/ros2_ws/install/local_setup.bash"
+source install/local_setup.bash
 set -u
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-117}"
 export ROS_LOCALHOST_ONLY="${ROS_LOCALHOST_ONLY:-1}"
@@ -57,7 +57,7 @@ fi
 
 "$HOME/venvs/ev-charging-d415-gpu/bin/python" -u -B apps/live_pose.py \
   --camera orbbec-ros --camera-namespace /gemini --serial "$serial" \
-  --mesh assets/mesh/socket_mod.PLY \
+  --mesh config/mesh/socket_mod.PLY \
   --geometry config/geometry/socket_openings_ply.json \
   --weights weights/best.pt \
   --output "$run_dir/poses" \

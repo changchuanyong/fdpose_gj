@@ -30,6 +30,19 @@ def rotation_matrix_to_quaternion(rotation):
     return (quaternion / np.linalg.norm(quaternion)).tolist()
 
 
+def fill_pose_stamped(message, pose, stamp_ns, frame_id):
+    """Populate a PoseStamped from a 4x4 camera-from-target transform in metres."""
+    message.header.stamp.sec, message.header.stamp.nanosec = divmod(stamp_ns, 1_000_000_000)
+    message.header.frame_id = frame_id
+    message.pose.position.x = float(pose[0, 3])
+    message.pose.position.y = float(pose[1, 3])
+    message.pose.position.z = float(pose[2, 3])
+    message.pose.orientation.x, message.pose.orientation.y, \
+        message.pose.orientation.z, message.pose.orientation.w = \
+        rotation_matrix_to_quaternion(pose[:3, :3])
+    return message
+
+
 class PosePublisher:
     """Publish target poses without making ROS a required import for offline tools."""
 
@@ -48,15 +61,7 @@ class PosePublisher:
         return self._node.get_clock().now().nanoseconds
 
     def publish(self, pose, stamp_ns):
-        message = self._pose_type()
-        message.header.stamp.sec, message.header.stamp.nanosec = divmod(stamp_ns, 1_000_000_000)
-        message.header.frame_id = self._frame_id
-        message.pose.position.x = float(pose[0, 3])
-        message.pose.position.y = float(pose[1, 3])
-        message.pose.position.z = float(pose[2, 3])
-        message.pose.orientation.x, message.pose.orientation.y, \
-            message.pose.orientation.z, message.pose.orientation.w = \
-            rotation_matrix_to_quaternion(pose[:3, :3])
+        message = fill_pose_stamped(self._pose_type(), pose, stamp_ns, self._frame_id)
         self._publisher.publish(message)
 
     def close(self):

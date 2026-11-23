@@ -2,8 +2,7 @@
 
 在远程 Jetson 上从零部署 FoundationPose（固定提交
 `a1b694b83e633c2cb6115b9063d940a687759392`），并跑通官方 model-based demo。
-本文件只描述 Jetson 侧。原 Windows 原生环境已于 2026-11-11 清理，版本留档在
-`docs/env/conda-list-windows-20261111.txt` 与 `docs/env/pip-freeze-windows-20261111.txt`。
+本文件只描述 Jetson 侧。原 Windows 原生环境已于 2026-11-11 清理。
 
 ## 环境事实
 
@@ -25,7 +24,7 @@ Windows 侧局域网传输已有资产（来源与哈希见 `artifacts/environme
 
 远端全部位于 `dianjinglab` 用户家目录，未修改任何系统组件：
 
-- `~/fdonpose/third_party/FoundationPose`：项目自身的官方源码副本，固定提交 + `patches/foundationpose-windows.patch`。
+- `~/fdonpose-git/third_party/FoundationPose`：项目自身的官方源码副本，固定提交 + `patches/foundationpose-windows.patch`。
 - `~/venvs/foundationpose`：Python 3.10 虚拟环境。
 - `~/foundationpose-deploy/{logs,config,scripts}`：部署脚本、版本约束与日志。
 - `~/fp-debug-jetson`：demo 输出（`ob_in_cam`、`track_vis`）。
@@ -36,8 +35,8 @@ Windows 侧上传补丁、版本约束与脚本：
 
 ```powershell
 scp patches\foundationpose-windows.patch config\runtime-jetson.txt `
-    scripts\setup\jetson_setup.sh scripts\setup\jetson_fetch_wheels.sh scripts\eval\jetson_pose_parity.py `
-    scripts\probes\check_extension.py scripts\probes\check_torch_gpu.py `
+    scripts\setup\jetson_setup.sh scripts\setup\jetson_fetch_wheels.sh src\fdpose_tools\fdpose_tools\jetson_pose_parity.py `
+    scripts\probes\check_extension.py scripts\probes\check_torch_gpu.py scripts\probes\probe_report.py `
     jetson_dianjinglab:~/foundationpose-deploy/staging/
 ```
 
@@ -58,12 +57,13 @@ bash ~/foundationpose-deploy/scripts/jetson_setup.sh mycpp
 - `ext`：`CUDA_HOME=/usr/local/cuda-12.6`、`TORCH_CUDA_ARCH_LIST=8.7`、`MAX_JOBS=10`，
   以 `--no-build-isolation` 从 codeload tarball 构建 pytorch3d 与 nvdiffrast。
 - `mycpp`：CMake + pybind11 构建原生位姿聚类扩展。
+- Orbbec 驱动：把 `OrbbecSDK_ROS2` v1.5.21 放入 `third_party/OrbbecSDK_ROS2`（上游 clone，或从已有工作区 `cp -a <ws>/src/OrbbecSDK_ROS2 third_party/`），再 `colcon build --symlink-install --base-paths src third_party/OrbbecSDK_ROS2 --packages-up-to fdpose_bringup`。驱动只进项目 `install/`，**不写 `/opt/ros/humble`**；运行前 source 项目 `install/local_setup.bash`。aarch64 走 CMake 的 `arm64` 分支，SDK 库随源码提供。
 
 资产传输（Windows → Jetson）：
 
 ```powershell
 scp -r third_party\FoundationPose\weights third_party\FoundationPose\demo_data `
-    jetson_dianjinglab:~/fdonpose/third_party/FoundationPose/
+    jetson_dianjinglab:~/fdonpose-git/third_party/FoundationPose/
 ```
 
 实测 PowerShell 的 `tar -cf - | ssh "tar -xf -"` 管道会破坏二进制流（远端 tar 报
@@ -124,12 +124,12 @@ pybind11 构建，不需要 conda 的 `eigen`/`boost-cpp` 包。
 ```bash
 PY=~/venvs/foundationpose/bin/python
 E=~/foundationpose-deploy/evidence
-cd ~/fdonpose/third_party/FoundationPose
+cd ~/fdonpose-git/third_party/FoundationPose
 $PY check_env.py --demo-data
 $PY ~/foundationpose-deploy/scripts/check_torch_gpu.py --expect-torch 2.9.1 \
     --expect-torchvision 0.24.1 --output "$E/torch-gpu.json"
 $PY ~/foundationpose-deploy/scripts/check_extension.py pytorch3d \
-    --foundationpose-dir ~/fdonpose/third_party/FoundationPose --output "$E/pytorch3d.json"
+    --foundationpose-dir ~/fdonpose-git/third_party/FoundationPose --output "$E/pytorch3d.json"
 # nvdiffrast / warp / mycpp 同理
 $PY run_demo.py --headless --debug 1 --debug_dir ~/fp-debug-jetson
 # 出可视化图（3D 框 + 坐标轴），再编码视频：
@@ -163,6 +163,18 @@ Jetson 侧的不稳定。该偏差量级（亚 2 mm / 约 2°）与一次未滤�
 不构成精度结论。
 
 汇总见 `artifacts/jetson/deploy.json`。
+
+### 实时相机跟踪（实物充电口）
+
+| 场景 | 结果 |
+| --- | --- |
+| Gemini 336L，2026-11-19，双路原生 1280×720@30，桌面窗口 | 预览 28.37 fps（531 帧）；首次注册 7.46 s；60 个跟踪位姿，6.22 fps，延迟 P95 196.77 ms；15 次复核，无恢复或重置 |
+| Gemini 336L，2026-11-19，640×480 RGB-D 采集 | 对齐后彩色与深度均 640×480；60/60 组通过，29.96 组/秒，最大配对时差 0.0192 ms |
+| Gemini 336L，2026-11-19，640×480 静止实物 | 首次注册 7.09 s；连续跟踪 60 帧，8.93 fps；11 次复核全部通过，无恢复或重置 |
+| D415 实物，1280×720，桌面窗口 | 首帧 5 轮注册约 10.1 s；60 个跟踪位姿，约 5.9 fps；15 次投影检查通过 |
+| 同帧注册对照，640×480，同一组 RGB-D 与 SAM2 掩膜 | 5 轮约 6–7 s，3 轮约 4.4 s，2 轮约 3.6 s；相对 5 轮，3 轮最大差异约 0.12 mm / 0.28°，2 轮最大旋转差约 1.83° |
+
+同帧对照衡量的是不同设置之间的位姿差异，不是绝对精度；上述结果不覆盖 335L。实物窗口与同帧对照的报告目录为 `artifacts/` 下的 `d415-sam2-final-20261111-163114` 与 `d415-official-compare-20261111-172556`。
 
 ## 已知限制
 

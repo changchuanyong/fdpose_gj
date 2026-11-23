@@ -17,14 +17,17 @@ import torch
 import trimesh
 
 
-PROJECT = Path(__file__).resolve().parents[2]
+PROJECT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(PROJECT / "src/fdpose_perception"))
+from fdpose_perception.jsonio import write_json as _write_json
+from fdpose_perception.validation import pose_delta as _pose_delta
 FOUNDATIONPOSE = PROJECT / "third_party/FoundationPose"
-MESH = PROJECT / "assets/mesh/socket_mod.PLY"
+MESH = PROJECT / "config/mesh/socket_mod.PLY"
 TRACK_FRAMES = 8
 
 
 def write_json(path, data):
-    path.write_text(json.dumps(data, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+    _write_json(path, data, allow_nan=False)
 
 
 def instrument(estimator, timings, frames=None):
@@ -109,10 +112,7 @@ def capture(directory, serial, estimator):
 
 
 def pose_delta(reference, candidate):
-    a, b = np.asarray(reference), np.asarray(candidate)
-    delta = np.linalg.inv(a) @ b
-    radians = np.arccos(np.clip((np.trace(delta[:3, :3]) - 1) / 2, -1, 1))
-    return float(np.linalg.norm(delta[:3, 3]) * 1000), float(np.degrees(radians))
+    return _pose_delta(reference, candidate, unit="mm")
 
 
 def compare(directory, estimator):

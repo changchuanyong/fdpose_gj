@@ -10,7 +10,7 @@ source install/local_setup.bash
 ros2 launch fdpose_bringup fdpose_live.launch.py --show-args
 ```
 
-Gemini 模式需先按[零件接入指南](../../../docs/part_pose.md)启动驱动，在同一 ROS 域中运行。每次指定新的输出目录。
+Gemini 模式需先按[零件接入指南](../../docs/part_pose.md)启动驱动，在同一 ROS 域中运行。每次指定新的输出目录。
 
 ```bash
 ros2 launch fdpose_bringup fdpose_live.launch.py \
