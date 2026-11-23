@@ -42,7 +42,7 @@ scikit-image
 
 # 以下是 fdpose 自身运行路径所需，不在上游 requirements.txt 中，此前漏记：
 #   ultralytics —— YOLO 检测（adapters/detector.py），两种相机都必需
-#   pyrealsense2 —— D415 直连（fdpose_camera/rgbd.py），--camera d415 必需
+#   pyrealsense2 —— D415 直连（fdpose_perception/rgbd.py），--camera d415 必需
 #   hydra-core、iopath —— third_party/sam2 的 REQUIRED_PACKAGES。SAM2 本身经 sys.path
 #     以源码使用、不 pip 安装，但这两项必须装（默认 --mask-backend sam2 依赖它们）。
 # 陷阱：ultralytics 依赖 opencv-python（8.4.189 声明 !=4.13.0.90,>=4.7.0），headless 是
