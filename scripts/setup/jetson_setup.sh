@@ -15,7 +15,7 @@
 set -euo pipefail
 
 REPO="${REPO:-$HOME/fdonpose-git/third_party/FoundationPose}"
-VENV="${VENV:-$HOME/venvs/foundationpose}"
+VENV="${VENV:-$HOME/venvs/ev-charging-d415-gpu}"
 WORK="${WORK:-$HOME/foundationpose-deploy}"
 PATCH="${PATCH:-$WORK/0001-platform-compat.patch}"
 REQ="${REQ:-$WORK/config/runtime-jetson.txt}"
