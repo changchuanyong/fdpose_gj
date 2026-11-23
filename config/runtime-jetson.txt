@@ -3,7 +3,7 @@
 # 先按下面的命令安装 PyTorch（NVIDIA Jetson 轮子源，PyPI 的 cu126 轮子不适用于 aarch64）：
 #   pip install torch==2.9.1 torchvision==0.24.1 --index-url https://pypi.jetson-ai-lab.io/jp6/cu126
 #
-# 其余依赖与上游 requirements.txt 语义一致，只做五处平台适配：
+# 其余依赖在上游 requirements.txt 基础上做五处平台适配，另在文件末尾补 fdpose 自身所需：
 #   1. opencv-python-headless 取代 opencv-python：服务器无 GUI 依赖。
 #      必须用 5.x：FoundationPose 的 draw_xyz_axis 传 tipLength=0，OpenCV 4.14 会断言失败
 #      （tipLength > 0.0），5.0.0.93 与 Windows 侧一致。
@@ -39,3 +39,21 @@ omegaconf>=2.3
 psutil
 tqdm
 scikit-image
+
+# 以下是 fdpose 自身运行路径所需，不在上游 requirements.txt 中，此前漏记：
+#   ultralytics —— YOLO 检测（adapters/detector.py），两种相机都必需
+#   pyrealsense2 —— D415 直连（fdpose_camera/rgbd.py），--camera d415 必需
+#   hydra-core、iopath —— third_party/sam2 的 REQUIRED_PACKAGES。SAM2 本身经 sys.path
+#     以源码使用、不 pip 安装，但这两项必须装（默认 --mask-backend sam2 依赖它们）。
+# 陷阱：ultralytics 会拉入 opencv-python，与上面刻意固定的 headless 5.x 争用 cv2；
+#   装完必须确认 cv2.__version__ 仍是 5.0.0.93，否则 draw_xyz_axis 会在 tipLength=0 上断言失败。
+# 这四项的版本尚未在目标机冻结，需 pip freeze 后回填。
+ultralytics
+pyrealsense2
+hydra-core>=1.3.2
+iopath>=0.1.10
+
+# 非 pip 依赖，装 venv 前先确认：
+#   apt python3-tk —— preview.py 的 tkinter 预览。两个 run 脚本默认带 --show，缺它直接起不来。
+#   pyorbbecsdk v2 —— 仅 fdpose_tools/orbbec_capture.py 经 importlib 动态加载（重建支线采集）。
+#     主路径不需要，故不列入上面的自动安装项。

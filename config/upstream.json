@@ -17,6 +17,12 @@
     "commit": "253ac4fcea7de5f396371124af597e6cc957bfae",
     "path": "third_party/nvdiffrast"
   },
+  "sam2": {
+    "url": "https://github.com/facebookresearch/sam2.git",
+    "commit": "2b90b9f5ceec907a1c18123530e92e794ad901a4",
+    "path": "third_party/sam2",
+    "note": "used from source via sys.path, not pip-installed; needs hydra-core and iopath"
+  },
   "orbbec_camera_ros": {
     "url": "https://github.com/orbbec/OrbbecSDK_ROS2.git",
     "version": "1.5.21",
