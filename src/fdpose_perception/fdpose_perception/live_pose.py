@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 import sys
 
-CODE_ROOT = Path(__file__).resolve().parents[1]
+CODE_ROOT = Path(__file__).resolve().parents[3]
 ROOT = Path(os.environ.get("FDPOSE_ROOT", CODE_ROOT)).resolve()
 sys.path.insert(0, str(CODE_ROOT / "src/fdpose_perception"))
 sys.path.insert(0, str(CODE_ROOT / "src/fdpose_camera"))

@@ -11,7 +11,7 @@
 
 ## 补丁说明
 
-`patches/foundationpose-windows.patch` 修改 FoundationPose 的 5 个文件
+`patches/0001-platform-compat.patch` 修改 FoundationPose 的 5 个文件
 （`Utils.py`、`estimater.py`、`mycpp/CMakeLists.txt`、`mycpp/include/Utils.h`、`run_demo.py`），
 用于在官方未支持的平台组合上构建与运行。该补丁属于 FoundationPose 的衍生修改，
 再分发时必须同时保留上游 LICENSE 与版权声明。

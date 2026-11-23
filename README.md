@@ -8,7 +8,7 @@
 ![ros2](https://img.shields.io/badge/ROS%202-Humble-22314e)
 ![jetpack](https://img.shields.io/badge/JetPack-6.2%20%7C%20CUDA%2012.6-76b900)
 
-[部署](docs/jetson_setup.md) · [接入新零件](docs/part_pose.md) · [ROS 2 启动](src/fdpose_bringup/README.md) · [文档索引](docs/index.md) · [上游 FoundationPose](https://github.com/NVlabs/FoundationPose)
+[ROS 2 启动](src/fdpose_bringup/README.md) · [上游 FoundationPose](https://github.com/NVlabs/FoundationPose)
 
 </div>
 
@@ -32,12 +32,12 @@ flowchart LR
 
 ## 安装
 
-需要 Jetson AGX Orin（JetPack 6.2 / CUDA 12.6 / Ubuntu 22.04 aarch64）、ROS 2 Humble、Python 3.10 虚拟环境。完整步骤、固定版本与五处平台坑见 **[Jetson 部署文档](docs/jetson_setup.md)**。
+需要 Jetson AGX Orin（JetPack 6.2 / CUDA 12.6 / Ubuntu 22.04 aarch64）、ROS 2 Humble、Python 3.10 虚拟环境。
 
 ```bash
 cd ~/fdonpose-git
 REPO="$PWD/third_party/FoundationPose" VENV="$HOME/venvs/ev-charging-d415-gpu" \
-PATCH="$PWD/patches/foundationpose-windows.patch" REQ="$PWD/config/runtime-jetson.txt" \
+PATCH="$PWD/patches/0001-platform-compat.patch" REQ="$PWD/config/runtime-jetson.txt" \
 WORK="$HOME/foundationpose-deploy" bash scripts/setup/jetson_setup.sh all
 
 source /opt/ros/humble/setup.bash
@@ -102,7 +102,7 @@ ros2 topic echo /fdpose/pose --once
 
 ### 桌面 CLI
 
-入口 [apps/live_pose.py](apps/live_pose.py)，两个启动脚本都是它的薄封装，可直接追加参数：
+入口 [live_pose.py](src/fdpose_perception/fdpose_perception/live_pose.py)，两个启动脚本都是它的薄封装，可直接追加参数：
 
 ```bash
 bash src/fdpose_bringup/scripts/run_d415.sh --stream-width 1280 --stream-height 720
@@ -130,8 +130,6 @@ bash src/fdpose_bringup/scripts/run_330s.sh --mask-backend yolo-seg --weights we
 
 </details>
 
-换零件网格、坐标配置或手动启动 Orbbec 驱动，见 [接入新零件](docs/part_pose.md)。
-
 ## 输出
 
 D415 写入 `artifacts/d415-live-*`，Gemini 写入 `artifacts/gemini-330s-*/poses/`，驱动日志在同次运行目录的 `camera.log`。
@@ -150,28 +148,17 @@ D415 写入 `artifacts/d415-live-*`，Gemini 写入 `artifacts/gemini-330s-*/pos
 python src/fdpose_tools/fdpose_tools/replay_drift.py <漂移目录> --output <结果.json>
 ```
 
-## 文档
-
-| 文档 | 内容 |
-| --- | --- |
-| [Jetson 部署与验证](docs/jetson_setup.md) | 从零部署、固定版本、平台问题、[实测数据](docs/jetson_setup.md#实测结果) |
-| [接入新零件](docs/part_pose.md) | 训练分割权重、选择网格与目标坐标系、双终端启动 |
-| [ROS 2 启动](src/fdpose_bringup/README.md) | 包构建、启动参数、光学坐标系与时间戳 |
-| [管件 RGB-D 重建](docs/pipe_rgbd.md) | 335L / D415 采集与网格重建（尚未真机验证） |
-
 <details>
 <summary><b>目录结构</b></summary>
 
 ```text
 src/
   fdpose_camera/      RGB-D 接入 · D415 发布节点
-  fdpose_perception/  几何 · 流程 · 复核 · 记录 · 预览 · 适配层 · 无头节点
+  fdpose_perception/  几何 · 流程 · 复核 · 记录 · 预览 · 适配层 · 桌面 CLI · 无头节点
   fdpose_bringup/     组合启动（CLI / 节点 / D415）· scripts/ 桌面入口
   fdpose_tools/       漂移回放 · 离线评估 · 采集 · 重建
-apps/live_pose.py     桌面 CLI 入口（薄前端，共用 PosePipeline）
 scripts/              setup/ 部署 · probes/ 环境探针
 config/               运行时约束、上游版本、几何配置、mesh/ 零件网格
-docs/                 部署、流程与历史记录
 patches/              上游适配补丁
 ```
 

@@ -4,17 +4,17 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from fdpose_common import common_arguments, description, process
+from fdpose_common import common_arguments, description, entry_path, process
 
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration
 
 
 def generate_launch_description():
     arguments = common_arguments(frames="60")
     arguments.append(DeclareLaunchArgument("camera", default_value="orbbec-ros"))
     root = LaunchConfiguration("project_root")
-    entry = PathJoinSubstitution([root, "apps", "live_pose.py"])
+    entry = entry_path(root, "fdpose_perception", "live_pose.py")
     flags = ["--camera", LaunchConfiguration("camera"),
              "--camera-namespace", LaunchConfiguration("camera_namespace"),
              "--serial", LaunchConfiguration("serial"),

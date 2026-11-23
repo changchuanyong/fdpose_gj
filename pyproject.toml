@@ -1,4 +1,4 @@
-# 仅用于工具配置。本项目不作为可安装分发包，运行入口是 apps/、scripts/ 与 src/fdpose_tools/ 下的脚本。
+# 仅用于工具配置。本项目不作为可安装分发包，运行入口是 src/ 各包与 scripts/ 下的脚本。
 
 [tool.ruff]
 target-version = "py310"

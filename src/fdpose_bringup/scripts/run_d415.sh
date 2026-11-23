@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.."
 
-exec "$HOME/venvs/ev-charging-d415-gpu/bin/python" -u -B apps/live_pose.py \
+exec "$HOME/venvs/ev-charging-d415-gpu/bin/python" -u -B src/fdpose_perception/fdpose_perception/live_pose.py \
   --serial 349222063070 \
   --mesh config/mesh/socket_mod.PLY \
   --geometry config/geometry/socket_openings_ply.json \

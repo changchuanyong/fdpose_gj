@@ -10,14 +10,14 @@
 #   bash jetson_setup.sh all     # 依次执行以上四步
 #
 # 依赖的前置文件（由 Windows 侧上传）：
-#   $WORK/foundationpose-windows.patch
+#   $WORK/0001-platform-compat.patch
 #   $WORK/config/runtime-jetson.txt
 set -euo pipefail
 
 REPO="${REPO:-$HOME/fdonpose-git/third_party/FoundationPose}"
 VENV="${VENV:-$HOME/venvs/foundationpose}"
 WORK="${WORK:-$HOME/foundationpose-deploy}"
-PATCH="${PATCH:-$WORK/foundationpose-windows.patch}"
+PATCH="${PATCH:-$WORK/0001-platform-compat.patch}"
 REQ="${REQ:-$WORK/config/runtime-jetson.txt}"
 # 与 config/upstream.json 的 foundationpose.commit 一致；staging 阶段先于 venv，无 python/jq 可解析该文件。
 COMMIT="a1b694b83e633c2cb6115b9063d940a687759392"
@@ -63,17 +63,8 @@ stage_venv() {
   fi
   log "upgrading pip/setuptools/wheel"
   "$PY" -m pip install -q --upgrade pip setuptools wheel
-  # Jetson 轮子源单连接很慢，优先用 jetson_fetch_wheels.sh 并行下载好的本地轮子。
-  local torch_wheel torchvision_wheel
-  torch_wheel="$(ls "$WORK"/wheels/torch-"$TORCH_VERSION"-cp310-cp310-linux_aarch64.whl 2>/dev/null | head -n 1)"
-  torchvision_wheel="$(ls "$WORK"/wheels/torchvision-"$TORCHVISION_VERSION"-cp310-cp310-linux_aarch64.whl 2>/dev/null | head -n 1)"
-  if [ -n "$torch_wheel" ] && [ -n "$torchvision_wheel" ]; then
-    log "installing torch/torchvision from local wheels"
-    "$PY" -m pip install "$torch_wheel" "$torchvision_wheel"
-  else
-    log "installing torch==$TORCH_VERSION torchvision==$TORCHVISION_VERSION from $TORCH_INDEX"
-    "$PY" -m pip install "torch==$TORCH_VERSION" "torchvision==$TORCHVISION_VERSION" --index-url "$TORCH_INDEX"
-  fi
+  log "installing torch==$TORCH_VERSION torchvision==$TORCHVISION_VERSION from $TORCH_INDEX"
+  "$PY" -m pip install "torch==$TORCH_VERSION" "torchvision==$TORCHVISION_VERSION" --index-url "$TORCH_INDEX"
   "$PY" -m pip install -q pybind11 ninja
   log "installing cuDSS $CUDSS_VERSION and linking it into torch/lib"
   "$PY" -m pip install -q "nvidia-cudss-cu12==$CUDSS_VERSION"

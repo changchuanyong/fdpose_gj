@@ -5,7 +5,7 @@
     "commit": "a1b694b83e633c2cb6115b9063d940a687759392",
     "path": "third_party/FoundationPose",
     "local_modifications": true,
-    "patch": "patches/foundationpose-windows.patch"
+    "patch": "patches/0001-platform-compat.patch"
   },
   "pytorch3d": {
     "url": "https://github.com/facebookresearch/pytorch3d.git",

@@ -55,7 +55,7 @@ if [[ "$ready" != true ]]; then
   exit 1
 fi
 
-"$HOME/venvs/ev-charging-d415-gpu/bin/python" -u -B apps/live_pose.py \
+"$HOME/venvs/ev-charging-d415-gpu/bin/python" -u -B src/fdpose_perception/fdpose_perception/live_pose.py \
   --camera orbbec-ros --camera-namespace /gemini --serial "$serial" \
   --mesh config/mesh/socket_mod.PLY \
   --geometry config/geometry/socket_openings_ply.json \
