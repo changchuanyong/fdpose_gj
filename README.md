@@ -2,7 +2,7 @@
 
 # fdpose
 
-**Jetson 上的零件 6D 位姿估计与跟踪 —— RGB-D 进，ROS 2 `PoseStamped` 出**
+**Jetson 上的零件 6D 位姿估计与跟踪，支持 RGB-D 输入、桌面预览和 ROS 2 位姿发布**
 
 ![python](https://img.shields.io/badge/python-3.10-blue)
 ![ros2](https://img.shields.io/badge/ROS%202-Humble-22314e)
@@ -24,7 +24,7 @@ flowchart LR
   seg --> reg["首帧注册<br/>默认 3 轮精化"]
   reg --> track["逐帧跟踪<br/>每帧精化 2 轮"]
   track --> check{"周期复核<br/>投影 / 检测框 / 表面深度"}
-  check -- 通过 --> out["PoseStamped<br/>poses.jsonl"]
+  check -- 通过 --> out["poses.jsonl<br/>启用发布时输出 PoseStamped"]
   check -- 失配 --> recover["从最后确认位姿恢复"]
   recover -- 成功 --> track
   recover -- 失败 --> det
@@ -34,12 +34,17 @@ flowchart LR
 
 需要 Jetson AGX Orin（JetPack 6.2 / CUDA 12.6 / Ubuntu 22.04 aarch64）、ROS 2 Humble、Python 3.10 虚拟环境。
 
+在仓库根目录执行以下命令。`jetson_setup.sh all` 检出并修补 FoundationPose、准备 Python 虚拟环境并编译扩展。
+
 ```bash
-cd ~/fdonpose-git
 REPO="$PWD/third_party/FoundationPose" VENV="$HOME/venvs/ev-charging-d415-gpu" \
 PATCH="$PWD/patches/0001-platform-compat.patch" REQ="$PWD/config/runtime-jetson.txt" \
 WORK="$HOME/foundationpose-deploy" bash scripts/jetson_setup.sh all
+```
 
+如果使用 Gemini 或通过 ROS 2 launch 启动位姿节点，先按 [上游版本清单](config/upstream.json) 将 Orbbec 驱动放到 `third_party/OrbbecSDK_ROS2`，再按下方命令构建工作区。仅用 D415 桌面脚本可跳过 ROS 2 构建。
+
+```bash
 source /opt/ros/humble/setup.bash
 export FDPOSE_ROOT="$PWD"
 colcon build --symlink-install --base-paths src third_party/OrbbecSDK_ROS2 --packages-up-to fdpose_bringup
@@ -51,18 +56,19 @@ source install/local_setup.bash
 
 | 路径 | 内容 |
 | --- | --- |
-| `weights/best.pt` | YOLO 检测或分割权重 |
+| `weights/best.pt` | 默认是 YOLO 检测权重。使用 `--mask-backend yolo-seg` 时传入 YOLO 分割权重 |
 | `weights/sam2.1_hiera_small.pt` | SAM2.1 检查点（`--mask-backend sam2` 时必需） |
-| `third_party/FoundationPose` | 固定提交 + [适配补丁](patches/README.md)，含上游 `weights/`、`demo_data/` |
-| `third_party/pytorch3d`、`third_party/nvdiffrast` | 固定提交，源码构建 |
-| `third_party/sam2` | SAM2 源码 |
-| `third_party/OrbbecSDK_ROS2` | Orbbec ROS 2 驱动 v1.5.21（含 aarch64 SDK 库），随项目 colcon 构建，不装系统目录 |
+| `third_party/FoundationPose/weights/` | 另行准备 FoundationPose 上游模型权重并保持原目录结构 |
+| `third_party/sam2` | 固定版本的 SAM2 源码，使用默认的 SAM2 掩膜后端时需要 |
+| `third_party/OrbbecSDK_ROS2` | Orbbec ROS 2 驱动 v1.5.21（含 aarch64 SDK 库），构建上述 ROS 2 工作区时需要 |
 
-上游提交见 [config/upstream.json](config/upstream.json)，依赖约束见 [config/runtime-jetson.txt](config/runtime-jetson.txt)。两处易踩的坑：`opencv-python-headless` 必须 5.x（4.14 在 `draw_xyz_axis` 的 `tipLength=0` 上断言失败）；`warp-lang` 固定 1.9.1（1.19.0 自带 CUDA 13.4，会判 Orin 驱动不足而退回 CPU）。
+部署脚本从固定提交构建 PyTorch3D 和 nvdiffrast。上游提交见 [config/upstream.json](config/upstream.json)，FoundationPose 补丁见 [patches/README.md](patches/README.md)，依赖约束见 [config/runtime-jetson.txt](config/runtime-jetson.txt)。两处易踩的坑：`opencv-python-headless` 必须 5.x（4.14 在 `draw_xyz_axis` 的 `tipLength=0` 上断言失败）；`warp-lang` 固定 1.9.1（1.19.0 自带 CUDA 13.4，会判 Orin 驱动不足而退回 CPU）。
 
 </details>
 
 ## 快速开始
+
+### 桌面预览
 
 **Gemini 336L / 335L** —— 桌面终端，一条命令拉起相机驱动 + 位姿程序，默认原生 1280×720@30：
 
@@ -76,15 +82,47 @@ bash scripts/run_330s.sh
 bash scripts/run_d415.sh
 ```
 
-**无头运行** —— SSH / 无显示器。Gemini 先启动 Orbbec 驱动，再在同一 ROS 域运行；D415 直连，加 `camera:=d415` 即可：
+让目标完整入镜（`Aim at the target` 表示未检测到，`Target clipped` 表示目标贴边），按 **Q** 或 **Esc** 退出。Gemini 脚本默认使用序列号 `CPCD7530009J`，可用 `ORBBEC_SERIAL` 覆盖。D415 脚本默认使用 `349222063070`，可追加 `--serial` 参数覆盖。两个脚本默认将位姿写入文件，追加 `--ros-pose-topic /fdpose/pose` 可启用 ROS 2 发布。D415 桌面脚本启用发布时，先在当前终端加载 ROS 2 环境。
+
+### 无头运行（SSH 或无显示器）
+
+每个终端都先进入仓库根目录，再加载环境：
 
 ```bash
-ros2 launch fdpose_bringup fdpose_live.launch.py serial:=CPCD7530009J frames:=0 \
-  output:="artifacts/gemini-node-$(date +%Y%m%d-%H%M%S)"
-ros2 topic echo /fdpose/pose --once
+source /opt/ros/humble/setup.bash
+source install/local_setup.bash
+export FDPOSE_ROOT="$PWD"
 ```
 
-让目标完整入镜（`Aim at the target` = 未检测到，`Target clipped` = 贴边），按 **Q** / **Esc** 退出。默认序列号 D415 `349222063070`、Gemini `CPCD7530009J`，后者用 `ORBBEC_SERIAL` 覆盖。
+**Gemini** 在第一个终端启动驱动。将 `serial_number` 替换成实际设备的序列号：
+
+```bash
+export ROS_DOMAIN_ID=117 ROS_LOCALHOST_ONLY=1
+ros2 launch orbbec_camera gemini_330_series.launch.py \
+  camera_name:=gemini serial_number:=CPCD7530009J \
+  color_width:=1280 color_height:=720 color_fps:=30 \
+  depth_width:=1280 depth_height:=720 depth_fps:=30 \
+  depth_registration:=true align_mode:=SW enable_frame_sync:=true \
+  frame_aggregate_mode:=full_frame enable_depth_scale:=true \
+  publish_tf:=false trigger_out_enabled:=false
+```
+
+驱动启动后，在第二个终端使用相同的 ROS 域和相机序列号启动位姿节点：
+
+```bash
+export ROS_DOMAIN_ID=117 ROS_LOCALHOST_ONLY=1
+ros2 launch fdpose_bringup fdpose_live.launch.py serial:=CPCD7530009J frames:=0 \
+  output:="artifacts/gemini-node-$(date +%Y%m%d-%H%M%S)"
+```
+
+**D415** 直连取流，可直接启动位姿节点。将 `serial` 替换成实际设备的序列号：
+
+```bash
+ros2 launch fdpose_bringup fdpose_live.launch.py camera:=d415 serial:=349222063070 frames:=0 \
+  output:="artifacts/d415-node-$(date +%Y%m%d-%H%M%S)"
+```
+
+在另一个终端用 `ros2 topic echo /fdpose/pose --once` 查看一条位姿消息。先加载上面的 ROS 环境，使用与位姿节点相同的 ROS 域设置。
 
 ## 用法
 
@@ -96,7 +134,7 @@ ros2 topic echo /fdpose/pose --once
 
 `/fdpose/pose` 发布 `geometry_msgs/msg/PoseStamped`，等价于 JSON 里的 `T_camera_target_m`：平移单位米，四元数 x/y/z/w。Gemini 用彩色光学坐标系与采集时间戳，D415 用 `camera_color_optical_frame` 与主机读帧时刻。**丢失期间停止发布**，订阅端应检查时间戳判断数据是否过期。
 
-### 桌面 CLI
+### CLI 参数
 
 入口 [live_pose.py](src/fdpose_perception/fdpose_perception/live_pose.py)，两个启动脚本都是它的薄封装，可直接追加参数：
 
@@ -114,6 +152,8 @@ bash scripts/run_330s.sh --mask-backend yolo-seg --weights weights/seg.pt
 | `--camera` | `d415` | `d415` 或 `orbbec-ros` |
 | `--camera-namespace` | `/gemini` | Orbbec 话题命名空间 |
 | `--mask-backend` | `sam2` | `sam2` 或 `yolo-seg` |
+| `--foundationpose` | `third_party/FoundationPose` | FoundationPose 源码目录 |
+| `--sam2-checkpoint` | `weights/sam2.1_hiera_small.pt` | `sam2` 后端使用的检查点 |
 | `--class-id` / `--mesh-units` | `0` / `mm` | 目标类别 ID、网格单位 |
 | `--frames` | `60` | 初始化后跟踪帧数，`0` 为持续运行 |
 | `--stream-width` / `--stream-height` | `640` / `480` | D415 取流分辨率 |
@@ -122,13 +162,15 @@ bash scripts/run_330s.sh --mask-backend yolo-seg --weights weights/seg.pt
 | `--show` | 关 | 桌面预览，需要 `DISPLAY` |
 | `--ros-pose-topic` | 关 | 传入绝对话题名即开启 `PoseStamped` 输出 |
 
+`--foundationpose` 和 `--sam2-checkpoint` 的默认路径相对于 `FDPOSE_ROOT`。直接运行 CLI 时，若未设置该变量，则以源码所在的仓库根目录为准。
+
 预览是单窗口。Gemini 走独立进程显示推理源帧，字幕带状态、源帧号与 ROS 时间戳，队列容量 1，丢帧不阻塞推理；D415 走进程内 tkinter，状态显示在窗口标题。`summary.json` 中 `preview_fps` 是画面刷新速度（仅 Gemini 有），`tracking_fps` 是位姿输出速度。
 
 </details>
 
 ## 输出
 
-D415 写入 `artifacts/d415-live-*`，Gemini 写入 `artifacts/gemini-330s-*/poses/`，驱动日志在同次运行目录的 `camera.log`。
+桌面脚本默认将 D415 输出写入 `artifacts/d415-live-*`，Gemini 输出写入 `artifacts/gemini-330s-*/poses/`。Gemini 桌面脚本的驱动日志位于同次运行目录的 `camera.log`。ROS 2 launch 将结果写入 `output` 指定的目录。
 
 | 文件 | 内容 |
 | --- | --- |
