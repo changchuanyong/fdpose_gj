@@ -6,8 +6,7 @@ import time
 import cv2
 import numpy as np
 
-from fdpose_perception.calibration import rectify_maps
-from fdpose_perception.rgbd import RGBDStream
+from fdpose_perception.camera import RGBDStream, rectify_maps
 
 
 # The Orbbec ROS driver multiplies raw depth by the device ValueScale before

@@ -1,4 +1,4 @@
-"""Registration preparation and live pose session state; no camera, UI or CUDA imports."""
+"""Pose tracking, projection geometry and validation without camera, UI or CUDA imports."""
 
 from dataclasses import dataclass
 import json
@@ -7,12 +7,10 @@ import time
 import cv2
 import numpy as np
 
-from fdpose_perception.geometry import box_in_view, projected_box
-from fdpose_perception.validation import (MAX_REVIEW_ROTATION_DEG, MAX_REVIEW_TRANSLATION_M,
-                                          pose_delta)
-
 
 UNIT_TO_M = {"mm": 0.001, "m": 1.0}
+MAX_REVIEW_ROTATION_DEG = 12.0
+MAX_REVIEW_TRANSLATION_M = 0.05
 
 
 def load_cad_from_target(path):
@@ -303,3 +301,66 @@ class PosePipeline:
             image = ui.draw(*last_overlay)
         if image is not None:
             cv2.imwrite(str(recorder.output / "last_pose.jpg"), image)
+
+
+def box_in_view(box, shape, margin=8):
+    x0, y0, x1, y1 = box
+    height, width = shape[:2]
+    return margin <= x0 < x1 <= width - margin and margin <= y0 < y1 <= height - margin
+
+
+def projected_box(K, corners, pose):
+    points = corners @ pose[:3, :3].T + pose[:3, 3]
+    if not np.isfinite(points).all() or np.any(points[:, 2] <= 0):
+        return None
+    pixels = points @ K.T
+    xy = pixels[:, :2] / pixels[:, 2:]
+    return np.concatenate((xy.min(axis=0), xy.max(axis=0)))
+
+
+def box_iou(a, b):
+    if a is None or b is None:
+        return 0.0
+    overlap = np.maximum(np.minimum(a[2:], b[2:]) - np.maximum(a[:2], b[:2]), 0)
+    intersection = float(np.prod(overlap))
+    union = float(np.prod(a[2:] - a[:2]) + np.prod(b[2:] - b[:2])) - intersection
+    return intersection / union if union > 0 else 0.0
+
+
+def validate_pose(corners, pose, detection_box, measured_depth, K, render_depth,
+                  align_depth, minimum_iou=0.35):
+    overlap = box_iou(projected_box(K, corners, pose), detection_box)
+    result = {"accepted": False, "alignment_iou": overlap}
+    if detection_box is None or overlap < minimum_iou:
+        return result
+    rendered_depth = render_depth(K, measured_depth)
+    result.update(align_depth(rendered_depth, measured_depth))
+    return result
+
+
+def pose_delta(reference, candidate):
+    reference = np.asarray(reference, dtype=float)
+    candidate = np.asarray(candidate, dtype=float)
+    delta = np.linalg.inv(reference) @ candidate
+    cosine = np.clip((np.trace(delta[:3, :3]) - 1) / 2, -1, 1)
+    translation = float(np.linalg.norm(delta[:3, 3]))
+    return translation, float(np.degrees(np.arccos(cosine)))
+
+
+def depth_alignment(rendered_depth, measured_depth, min_pixels=128, tolerance_m=0.02,
+                    max_median_error_m=0.015, min_inlier_ratio=0.65):
+    rendered_depth = np.asarray(rendered_depth)
+    measured_depth = np.asarray(measured_depth)
+    interior = cv2.erode((rendered_depth > 0.001).astype(np.uint8), np.ones((3, 3), np.uint8))
+    valid = (interior > 0) & (measured_depth > 0.001)
+    pixels = int(np.count_nonzero(valid))
+    if pixels < min_pixels:
+        return {"accepted": False, "depth_pixels": pixels,
+                "depth_median_error_mm": None, "depth_inlier_ratio": None}
+    errors = np.abs(rendered_depth[valid] - measured_depth[valid])
+    median_error = float(np.median(errors))
+    inlier_ratio = float(np.mean(errors <= tolerance_m))
+    return {"accepted": bool(median_error <= max_median_error_m
+                             and inlier_ratio >= min_inlier_ratio),
+            "depth_pixels": pixels, "depth_median_error_mm": median_error * 1000,
+            "depth_inlier_ratio": inlier_ratio, "depth_inlier_tolerance_mm": tolerance_m * 1000}

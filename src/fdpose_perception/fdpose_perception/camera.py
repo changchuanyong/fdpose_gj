@@ -1,4 +1,4 @@
-"""Live RGB-D camera contract and RealSense D415 adapter."""
+"""Live RGB-D camera contract, rectification maps and RealSense D415 adapter."""
 
 from collections.abc import Callable
 from contextlib import contextmanager
@@ -6,8 +6,6 @@ from dataclasses import dataclass
 
 import cv2
 import numpy as np
-
-from fdpose_perception.calibration import rectify_maps
 
 
 @dataclass
@@ -73,3 +71,19 @@ def open_d415(serial, width, height, fps=30):
         yield RGBDStream(K, metadata, read_frame)
     finally:
         pipeline.stop()
+
+
+def rectify_maps(K, coefficients, size):
+    """Return cv2 remap maps, or None when the distortion is negligible.
+
+    Distortion-model acceptance stays with the caller: each SDK reports models
+    differently and rejecting an unsupported model is a device-boundary check.
+    """
+    import cv2
+
+    coefficients = np.asarray(coefficients, dtype=float)
+    if not np.any(np.abs(coefficients) > 0.0):
+        return None
+    matrix = np.asarray(K, dtype=float)
+    return cv2.initUndistortRectifyMap(matrix, coefficients, None, matrix,
+                                       (int(size[0]), int(size[1])), cv2.CV_32FC1)

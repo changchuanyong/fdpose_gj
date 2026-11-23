@@ -16,11 +16,10 @@ PROJECT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT / "src/fdpose_perception"))
 sys.path.insert(0, str(PROJECT / "third_party/FoundationPose"))
 from estimater import FoundationPose
-from fdpose_perception.frontend import make_validate
-from fdpose_perception.pipeline import TrackingSession
-from fdpose_perception.validation import pose_delta
+from fdpose_perception.adapters.foundationpose import make_validate
+from fdpose_perception.tracking import TrackingSession, pose_delta
 from fdpose_perception.adapters.detector import TargetDetector
-from fdpose_perception.jsonio import write_json
+from fdpose_perception.recording import write_json
 
 
 def detect_box(detector, rgb):

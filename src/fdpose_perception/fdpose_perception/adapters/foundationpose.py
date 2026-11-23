@@ -1,4 +1,6 @@
-"""Render the depth of FoundationPose's current centered-mesh state."""
+"""FoundationPose depth rendering, validation and pose overlays."""
+
+from functools import partial
 
 
 def render_depth(estimator, K, depth):
@@ -14,12 +16,22 @@ def render_depth(estimator, K, depth):
     return rendered[0].detach().cpu().numpy()
 
 
+def make_validate(corners, estimator, default_K):
+    from fdpose_perception.tracking import depth_alignment, validate_pose
+
+    def validate(pose, detection_box, measured_depth, evaluation_K=None):
+        evaluation_K = default_K if evaluation_K is None else evaluation_K
+        return validate_pose(corners, pose, detection_box, measured_depth, evaluation_K,
+                             partial(render_depth, estimator), depth_alignment)
+    return validate
+
+
 def draw_pose(K, bgr_frame, cad_pose, target_pose, mesh_bounds):
     """Overlay the 3D bounding box and target XYZ axes on a BGR frame."""
     import numpy as np
     from estimater import draw_posed_3d_box, draw_xyz_axis
 
-    from fdpose_perception.geometry import projected_box
+    from fdpose_perception.tracking import projected_box
 
     boxed = draw_posed_3d_box(K, bgr_frame, cad_pose, mesh_bounds)
     scale = 0.04

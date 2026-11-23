@@ -149,11 +149,20 @@ python src/fdpose_perception/fdpose_perception/replay_drift.py <漂移目录> --
 
 ```text
 src/
-  fdpose_perception/  相机接入 · 几何 · 流程 · 复核 · 记录 · 预览 · 适配层 · CLI · 漂移回放
-  fdpose_bringup/     launch 组合启动
-scripts/              Jetson 部署 · 桌面启动入口
-config/               运行时约束、上游版本、几何配置、mesh/ 零件网格
-patches/              上游适配补丁
+  fdpose_perception/          ROS 2 感知包
+    fdpose_perception/        Python 实现
+      live_pose.py            实时位姿入口
+      replay_drift.py         离线漂移回放入口
+      camera.py               RGB-D 接口、D415 取流与相机校正
+      orbbec_ros.py           Orbbec ROS 2 RGB-D 同步取流
+      tracking.py             位姿流程、投影几何与跟踪复核
+      recording.py            位姿、漂移和 JSON 写入
+      preview.py              桌面预览
+      adapters/               检测、FoundationPose 与 ROS 2 发布适配
+  fdpose_bringup/             ROS 2 launch 组合启动
+scripts/                      Jetson 部署 · 桌面启动入口
+config/                       运行时约束、上游版本、几何配置、mesh/ 零件网格
+patches/                      上游适配补丁
 ```
 
 `third_party/` 按固定版本清单部署，运行输出写入 `artifacts/`，两者都不入库。lint 只查语法级错误：`ruff check .`。

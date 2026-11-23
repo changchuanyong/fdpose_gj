@@ -7,8 +7,6 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from fdpose_perception.jsonio import write_json
-
 
 class Recorder:
     def __init__(self, output, K, cad_from_target, publish=None):
@@ -72,3 +70,7 @@ class Recorder:
                     "recovery_validation": recovery_validation}
         write_json(directory / "metadata.json", metadata)
         emit({"event": "drift_rgbd_saved", "path": str(directory)})
+
+
+def write_json(path, value):
+    Path(path).write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
