@@ -87,16 +87,30 @@ class PairBuffer:
         return color, depth, self.infos['color'], self.infos['depth']
 
 
-class RosRgbdSource:
-    """Generic ROS RGB-D source: pair color/depth topics registered to the color optical frame."""
+class OrbbecRosSource:
+    """Gemini RGB-D over ROS: verify the device, then pair color/depth in the color optical frame."""
 
-    def __init__(self, node, executor, serial, namespace, camera_name, firmware=None):
+    def __init__(self, node, executor, serial, namespace='/gemini'):
+        from orbbec_camera_msgs.srv import GetDeviceInfo
         from rclpy.qos import QoSProfile, ReliabilityPolicy
         from sensor_msgs.msg import CameraInfo, Image
 
         namespace = '/' + namespace.strip('/')
         if namespace == '/':
             raise ValueError('An explicit camera namespace is required')
+        client = node.create_client(GetDeviceInfo, namespace + '/get_device_info')
+        if not client.wait_for_service(timeout_sec=8.0):
+            raise RuntimeError(f'No Orbbec device info service under {namespace}; check the ROS domain and namespace')
+        future = client.call_async(GetDeviceInfo.Request())
+        executor.spin_until_future_complete(future, timeout_sec=4.0)
+        response = future.result() if future.done() else None
+        if response is None or not response.success:
+            raise RuntimeError(f'Orbbec device info request failed under {namespace}')
+        device = response.info
+        if (device.serial_number != serial or 'gemini' not in device.name.lower()
+                or device.name.strip().upper().split()[-1] not in ('335L', '336L')):
+            raise RuntimeError(f'Unexpected Orbbec camera {device.name} {device.serial_number}, expected {serial}')
+
         self._executor = executor
         self._buffer = PairBuffer()
         qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT)
@@ -117,8 +131,8 @@ class RosRgbdSource:
         self._first = first
         self._frame_number = 0
         self.K = K
-        self.metadata = {"camera": camera_name, "serial": serial,
-                         "firmware": firmware, "rgb_resolution": [w, h],
+        self.metadata = {"camera": device.name, "serial": device.serial_number,
+                         "firmware": device.firmware_version, "rgb_resolution": [w, h],
                          "depth_resolution": [w, h], "K": K.tolist(),
                          "dist_coeffs": distortion.tolist(), "depth_scale_m": DEPTH_SCALE_M,
                          "timestamp_source": "ros_color_header", "frame_id": frame_id,
@@ -145,29 +159,6 @@ class RosRgbdSource:
         rgb, meters = decode_pair(color, depth, self._rectify)
         self._frame_number += 1
         return rgb, meters, self._frame_number, stamp_ns(color) / 1_000_000
-
-
-class OrbbecRosSource(RosRgbdSource):
-    """Gemini source that verifies the Orbbec device serial/model before subscribing."""
-
-    def __init__(self, node, executor, serial, namespace='/gemini'):
-        from orbbec_camera_msgs.srv import GetDeviceInfo
-
-        namespace = '/' + namespace.strip('/')
-        client = node.create_client(GetDeviceInfo, namespace + '/get_device_info')
-        if not client.wait_for_service(timeout_sec=8.0):
-            raise RuntimeError(f'No Orbbec device info service under {namespace}; check the ROS domain and namespace')
-        future = client.call_async(GetDeviceInfo.Request())
-        executor.spin_until_future_complete(future, timeout_sec=4.0)
-        response = future.result() if future.done() else None
-        if response is None or not response.success:
-            raise RuntimeError(f'Orbbec device info request failed under {namespace}')
-        device = response.info
-        if (device.serial_number != serial or 'gemini' not in device.name.lower()
-                or device.name.strip().upper().split()[-1] not in ('335L', '336L')):
-            raise RuntimeError(f'Unexpected Orbbec camera {device.name} {device.serial_number}, expected {serial}')
-        super().__init__(node, executor, device.serial_number, namespace, device.name,
-                         device.firmware_version)
 
 
 @contextmanager
