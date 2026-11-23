@@ -6,8 +6,10 @@
 
 - **FoundationPose**（NVlabs，CVPR 2024）：以固定提交拉取到 `third_party/FoundationPose`（不随仓库分发，
   版本见 `config/upstream.json`）。许可见其目录内 `LICENSE`，为 NVIDIA 版权声明，保留所有权利。
-- **SAM2、pytorch3d、nvdiffrast、warp-lang**：由 `scripts/setup/jetson_setup.sh` 从上游源码或 PyPI 安装，
+- **pytorch3d、nvdiffrast、warp-lang**：由 `scripts/setup/jetson_setup.sh` 从上游源码或 PyPI 安装，
   各自遵循其上游许可，本仓库不重复声明。
+- **SAM2**：以固定提交拉取到 `third_party/sam2`（版本见 `config/upstream.json`），经 `sys.path`
+  以源码方式使用，部署脚本不安装它。许可见其目录内 `LICENSE` 与 `LICENSE_cctorch`。
 
 ## 补丁说明
 

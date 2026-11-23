@@ -157,7 +157,7 @@ src/
   fdpose_perception/  几何 · 流程 · 复核 · 记录 · 预览 · 适配层 · 桌面 CLI · 无头节点
   fdpose_bringup/     组合启动（CLI / 节点 / D415）· scripts/ 桌面入口
   fdpose_tools/       漂移回放 · 离线评估 · 采集 · 重建
-scripts/              setup/ 部署 · probes/ 环境探针
+scripts/setup/        Jetson 部署脚本
 config/               运行时约束、上游版本、几何配置、mesh/ 零件网格
 patches/              上游适配补丁
 ```
