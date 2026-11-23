@@ -45,9 +45,10 @@ scikit-image
 #   pyrealsense2 —— D415 直连（fdpose_camera/rgbd.py），--camera d415 必需
 #   hydra-core、iopath —— third_party/sam2 的 REQUIRED_PACKAGES。SAM2 本身经 sys.path
 #     以源码使用、不 pip 安装，但这两项必须装（默认 --mask-backend sam2 依赖它们）。
-# 陷阱：ultralytics 会拉入 opencv-python，与上面刻意固定的 headless 5.x 争用 cv2；
-#   装完必须确认 cv2.__version__ 仍是 5.0.0.93，否则 draw_xyz_axis 会在 tipLength=0 上断言失败。
-# 这四项的版本尚未在目标机冻结，需 pip freeze 后回填。
+# 陷阱：ultralytics 依赖 opencv-python（8.4.189 声明 !=4.13.0.90,>=4.7.0），headless 是
+#   另一个发行名、不满足它，pip 会另装 GUI 版并与 headless 争用 cv2。装完必须确认
+#   cv2.__version__ 仍是 5.0.0.93，否则 draw_xyz_axis 会在 tipLength=0 上断言失败。
+# 这四项的版本尚未在目标机冻结，需 pip freeze 后回填；ultralytics 8.4.189 曾在 Windows 侧跑通。
 ultralytics
 pyrealsense2
 hydra-core>=1.3.2
