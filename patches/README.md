@@ -13,5 +13,5 @@ cd third_party/FoundationPose
 git apply ../../patches/0001-platform-compat.patch
 ```
 
-Jetson 侧由 `scripts/setup/jetson_setup.sh repo` 自动应用，并校验恰好 5 个文件被修改。
-该补丁是上游的衍生修改，再分发约束见 [NOTICE.md](../NOTICE.md)。
+Jetson 侧由 `scripts/jetson_setup.sh repo` 自动应用，并校验恰好 5 个文件被修改。
+该补丁是上游的衍生修改，再分发时必须保留上游 LICENSE 与版权声明。

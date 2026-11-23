@@ -10,7 +10,7 @@ source install/local_setup.bash
 ros2 launch fdpose_bringup fdpose_live.launch.py --show-args
 ```
 
-Gemini 模式需先启动 Orbbec 驱动（完整启动参数见 [run_330s.sh](scripts/run_330s.sh)），在同一 ROS 域中运行。每次指定新的输出目录，`frames:=0` 为持续运行。
+Gemini 模式需先启动 Orbbec 驱动（完整启动参数见 [run_330s.sh](../../scripts/run_330s.sh)），在同一 ROS 域中运行。每次指定新的输出目录，`frames:=0` 为持续运行。
 
 ```bash
 ros2 launch fdpose_bringup fdpose_live.launch.py \
@@ -29,4 +29,4 @@ ros2 launch fdpose_bringup fdpose_live.launch.py \
 
 默认话题 `/fdpose/pose` 发布 `geometry_msgs/msg/PoseStamped`，与同帧 JSON 的 `T_camera_target_m` 对应。平移单位为米，四元数按 x、y、z、w 排列。Gemini 使用彩色图像头的光学坐标系和采集时间。D415 使用 `camera_color_optical_frame` 和主机读帧时刻，设备毫秒保存在 JSON。丢失期间停止发布，订阅端应检查时间戳判断数据是否过期。
 
-桌面预览走 [run_330s.sh](scripts/run_330s.sh) 与 [run_d415.sh](scripts/run_d415.sh)，它们给同一个 CLI 加 `--show`。离线回放工具是 `fdpose_perception/replay_drift.py`，与实时共用同一套注册/跟踪/验证原子。
+桌面预览走 [run_330s.sh](../../scripts/run_330s.sh) 与 [run_d415.sh](../../scripts/run_d415.sh)，它们给同一个 CLI 加 `--show`。离线回放工具是 `fdpose_perception/replay_drift.py`，与实时共用同一套注册/跟踪/验证原子。

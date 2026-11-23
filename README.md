@@ -38,7 +38,7 @@ flowchart LR
 cd ~/fdonpose-git
 REPO="$PWD/third_party/FoundationPose" VENV="$HOME/venvs/ev-charging-d415-gpu" \
 PATCH="$PWD/patches/0001-platform-compat.patch" REQ="$PWD/config/runtime-jetson.txt" \
-WORK="$HOME/foundationpose-deploy" bash scripts/setup/jetson_setup.sh all
+WORK="$HOME/foundationpose-deploy" bash scripts/jetson_setup.sh all
 
 source /opt/ros/humble/setup.bash
 export FDPOSE_ROOT="$PWD"
@@ -67,13 +67,13 @@ source install/local_setup.bash
 **Gemini 336L / 335L** —— 桌面终端，一条命令拉起相机驱动 + 位姿程序，默认原生 1280×720@30：
 
 ```bash
-bash src/fdpose_bringup/scripts/run_330s.sh
+bash scripts/run_330s.sh
 ```
 
 **RealSense D415** —— 桌面终端，默认 640×480@30：
 
 ```bash
-bash src/fdpose_bringup/scripts/run_d415.sh
+bash scripts/run_d415.sh
 ```
 
 **无头运行** —— SSH / 无显示器。Gemini 先启动 Orbbec 驱动，再在同一 ROS 域运行；D415 直连，加 `camera:=d415` 即可：
@@ -101,8 +101,8 @@ ros2 topic echo /fdpose/pose --once
 入口 [live_pose.py](src/fdpose_perception/fdpose_perception/live_pose.py)，两个启动脚本都是它的薄封装，可直接追加参数：
 
 ```bash
-bash src/fdpose_bringup/scripts/run_d415.sh --stream-width 1280 --stream-height 720
-bash src/fdpose_bringup/scripts/run_330s.sh --mask-backend yolo-seg --weights weights/seg.pt
+bash scripts/run_d415.sh --stream-width 1280 --stream-height 720
+bash scripts/run_330s.sh --mask-backend yolo-seg --weights weights/seg.pt
 ```
 
 <details>
@@ -150,8 +150,8 @@ python src/fdpose_perception/fdpose_perception/replay_drift.py <漂移目录> --
 ```text
 src/
   fdpose_perception/  相机接入 · 几何 · 流程 · 复核 · 记录 · 预览 · 适配层 · CLI · 漂移回放
-  fdpose_bringup/     launch 组合启动 · scripts/ 桌面入口
-scripts/setup/        Jetson 部署脚本
+  fdpose_bringup/     launch 组合启动
+scripts/              Jetson 部署 · 桌面启动入口
 config/               运行时约束、上游版本、几何配置、mesh/ 零件网格
 patches/              上游适配补丁
 ```
@@ -162,7 +162,7 @@ patches/              上游适配补丁
 
 ## 许可与引用
 
-上游组件归属、补丁范围与再分发要求见 [NOTICE.md](NOTICE.md)。**本仓库自身许可尚未声明**，在明确选择许可证之前不应假定代码可被再分发或用于商业用途。
+**本仓库自身许可尚未声明**，在明确选择许可证之前不应假定代码可被再分发或用于商业用途。
 
 本工程围绕 NVlabs FoundationPose 构建，若对你有帮助请引用上游论文：
 

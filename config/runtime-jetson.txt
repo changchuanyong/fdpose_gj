@@ -11,7 +11,7 @@
 #   3. 固定 torch 2.9.1 / torchvision 0.24.1（见文件头，来自 NVIDIA Jetson 轮子源）。
 #   4. 追加 nvidia-cudss-cu12==0.8.0.10：torch 2.9.1 的 libtorch_cuda.so 依赖 libcudss.so.0，
 #      JetPack 6.2 不自带 cuDSS；安装后把库软链到 torch/lib 由 RUNPATH=$ORIGIN 解析。
-#      另外用 JetPack cuSolver 兼容垫片补上 cusolverDnXsyevBatched*（见 scripts/setup/jetson_setup.sh）。
+#      另外用 JetPack cuSolver 兼容垫片补上 cusolverDnXsyevBatched*（见 scripts/jetson_setup.sh）。
 #   5. warp-lang 固定 1.9.1：1.19.0 自带 CUDA 13.4 工具链，JetPack 6.2 的 12.6 驱动被判为
 #      "insufficient CUDA driver version" 而只用 CPU；1.9.1 带 CUDA 12.8 工具链可正常识别 Orin。
 # 带 == 的三项是平台适配必需的确切版本；其余为候选约束，部署后需在目标机 pip freeze 核对。
