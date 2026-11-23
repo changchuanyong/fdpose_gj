@@ -1,20 +1,20 @@
-"""Launch the existing FoundationPose application with optional ROS pose output."""
+"""Launch the FoundationPose live pose app: D415 or Gemini, desktop or headless."""
 
-import sys
+import os
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from fdpose_common import common_arguments, description, entry_path, process
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument, ExecuteProcess
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 
-from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+
+DEFAULT_ROOT = os.environ.get("FDPOSE_ROOT", str(Path.home() / "fdonpose-git"))
+DEFAULT_PYTHON = str(Path.home() / "venvs/ev-charging-d415-gpu/bin/python")
 
 
 def generate_launch_description():
-    arguments = common_arguments(frames="60")
-    arguments.append(DeclareLaunchArgument("camera", default_value="orbbec-ros"))
     root = LaunchConfiguration("project_root")
-    entry = entry_path(root, "fdpose_perception", "live_pose.py")
+    entry = PathJoinSubstitution([root, "src", "fdpose_perception", "fdpose_perception", "live_pose.py"])
     flags = ["--camera", LaunchConfiguration("camera"),
              "--camera-namespace", LaunchConfiguration("camera_namespace"),
              "--serial", LaunchConfiguration("serial"),
@@ -24,4 +24,18 @@ def generate_launch_description():
              "--output", LaunchConfiguration("output"),
              "--ros-pose-topic", LaunchConfiguration("pose_topic"),
              "--frames", LaunchConfiguration("frames")]
-    return description(arguments, [process(LaunchConfiguration("python"), entry, flags, root)])
+    return LaunchDescription([
+        DeclareLaunchArgument("project_root", default_value=DEFAULT_ROOT),
+        DeclareLaunchArgument("python", default_value=DEFAULT_PYTHON),
+        DeclareLaunchArgument("camera_namespace", default_value="/gemini"),
+        DeclareLaunchArgument("serial"),
+        DeclareLaunchArgument("mesh", default_value="config/mesh/socket_mod.PLY"),
+        DeclareLaunchArgument("geometry", default_value="config/geometry/socket_openings_ply.json"),
+        DeclareLaunchArgument("weights", default_value="weights/best.pt"),
+        DeclareLaunchArgument("output"),
+        DeclareLaunchArgument("pose_topic", default_value="/fdpose/pose"),
+        DeclareLaunchArgument("frames", default_value="60"),
+        DeclareLaunchArgument("camera", default_value="orbbec-ros"),
+        ExecuteProcess(cmd=[LaunchConfiguration("python"), "-u", entry] + flags,
+                       cwd=root, additional_env={"FDPOSE_ROOT": root}, output="screen"),
+    ])
