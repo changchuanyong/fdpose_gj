@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 CODE_ROOT = Path(__file__).resolve().parents[3]
 ROOT = Path(os.environ.get("FDPOSE_ROOT", CODE_ROOT)).resolve()
@@ -13,18 +14,16 @@ sys.path.insert(0, str(CODE_ROOT / "src/fdpose_perception"))
 from fdpose_perception.rgbd import open_d415
 from fdpose_perception.adapters.foundationpose import draw_pose
 from fdpose_perception.adapters.ros2 import PosePublisher
-from fdpose_perception.frontend import (add_common_args, bootstrap, build_summary, make_pipeline,
-                                        make_ui, make_validate, tracking_statistics,
-                                        validate_inputs, write_summary)
-from fdpose_perception.pipeline import load_cad_from_target
+from fdpose_perception.frontend import (add_common_args, bootstrap, build_summary, make_validate,
+                                        tracking_statistics, validate_inputs, write_summary)
+from fdpose_perception.pipeline import PosePipeline, load_cad_from_target
 from fdpose_perception.preview import make_preview
 from fdpose_perception.recording import Recorder
 
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    add_common_args(parser, ROOT, camera_choices=("d415", "orbbec-ros"), camera_default="d415",
-                    frames_default=60)
+    add_common_args(parser, ROOT)
     parser.add_argument("--stream-width", type=int, default=640, help="D415 stream width")
     parser.add_argument("--stream-height", type=int, default=480, help="D415 stream height")
     parser.add_argument("--show", action="store_true",
@@ -82,10 +81,16 @@ def main():
 
         publish = (lambda target_pose: pose_publisher.publish(target_pose, frame_stamp_ns)) if pose_publisher else None
         recorder = Recorder(args.output, K, cad_from_target, publish=publish)
-        pipeline = make_pipeline(model, args, K, make_validate(model.corners, model.estimator, K))
-        ui = make_ui(
+        pipeline = PosePipeline(model.session, model.detector,
+                                model.segmenter.segment_box if model.segmenter else None,
+                                model.corners, K, make_validate(model.corners, model.estimator, K),
+                                init_width=args.init_width, est_refine_iter=args.est_refine_iter,
+                                mask_backend=args.mask_backend)
+        ui = SimpleNamespace(
             read_frame=read_frame,
             present=lambda bgr, status: preview.present(bgr, status) if preview else True,
+            emit=lambda obj: print(json.dumps(obj, flush=True)),
+            log=lambda msg: print(msg, flush=True),
             draw=lambda bgr, cad_pose, target_pose: draw_pose(K, bgr, cad_pose, target_pose, model.mesh.bounds),
             interactive=bool(preview),
             closed=lambda: preview.closed if preview else False)

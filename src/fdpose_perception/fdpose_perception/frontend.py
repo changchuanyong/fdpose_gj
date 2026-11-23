@@ -14,11 +14,11 @@ import numpy as np
 from fdpose_perception.adapters.detector import Sam2Segmenter, TargetDetector
 from fdpose_perception.adapters.foundationpose import render_depth
 from fdpose_perception.jsonio import write_json
-from fdpose_perception.pipeline import PosePipeline, TrackingSession, UNIT_TO_M
+from fdpose_perception.pipeline import TrackingSession, UNIT_TO_M
 from fdpose_perception.validation import depth_alignment, validate_pose
 
 
-def add_common_args(parser, root, *, camera_choices, camera_default, frames_default):
+def add_common_args(parser, root):
     parser.add_argument("--foundationpose", type=Path, default=root / "third_party/FoundationPose")
     parser.add_argument("--mesh", type=Path, required=True)
     parser.add_argument("--mesh-units", choices=tuple(UNIT_TO_M), default="mm")
@@ -27,11 +27,11 @@ def add_common_args(parser, root, *, camera_choices, camera_default, frames_defa
     parser.add_argument("--class-id", type=int, default=0, help="Target class ID in YOLO weights")
     parser.add_argument("--mask-backend", choices=("sam2", "yolo-seg"), default="sam2")
     parser.add_argument("--sam2-checkpoint", type=Path, default=root / "weights/sam2.1_hiera_small.pt")
-    parser.add_argument("--camera", choices=camera_choices, default=camera_default)
+    parser.add_argument("--camera", choices=("d415", "orbbec-ros"), default="d415")
     parser.add_argument("--camera-namespace", default="/gemini", help="ROS 2 namespace for Orbbec")
     parser.add_argument("--serial", required=True, help="Expected camera serial number")
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--frames", type=int, default=frames_default,
+    parser.add_argument("--frames", type=int, default=60,
                         help="Tracking frames after initialization, 0 for continuous")
     parser.add_argument("--init-width", type=int, default=640,
                         help="Downscale RGB, depth and mask for registration to this width")
@@ -40,7 +40,7 @@ def add_common_args(parser, root, *, camera_choices, camera_default, frames_defa
 
 
 def validate_inputs(parser, args):
-    """File-existence checks shared by both frontends; numeric checks stay local."""
+    """File-existence checks; numeric checks stay in the CLI."""
     if not (args.foundationpose / "estimater.py").is_file():
         parser.error(f"Project FoundationPose source not found: {args.foundationpose}")
     for path in (args.mesh, args.geometry, args.weights):
@@ -85,21 +85,6 @@ def make_validate(corners, estimator, default_K):
         return validate_pose(corners, pose, detection_box, measured_depth, evaluation_K,
                              partial(render_depth, estimator), depth_alignment)
     return validate
-
-
-def make_pipeline(model, args, K, validate):
-    return PosePipeline(model.session, model.detector,
-                        model.segmenter.segment_box if model.segmenter else None,
-                        model.corners, K, validate,
-                        init_width=args.init_width, est_refine_iter=args.est_refine_iter,
-                        mask_backend=args.mask_backend)
-
-
-def make_ui(*, read_frame, present, draw, interactive, closed):
-    return SimpleNamespace(read_frame=read_frame, present=present,
-                           emit=lambda obj: print(json.dumps(obj, flush=True)),
-                           log=lambda msg: print(msg, flush=True),
-                           draw=draw, interactive=interactive, closed=closed)
 
 
 def tracking_statistics(recorder):

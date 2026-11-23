@@ -21,14 +21,12 @@ def validate_pose(corners, pose, detection_box, measured_depth, K, render_depth,
     return result
 
 
-def pose_delta(reference, candidate, unit="m"):
+def pose_delta(reference, candidate):
     reference = np.asarray(reference, dtype=float)
     candidate = np.asarray(candidate, dtype=float)
     delta = np.linalg.inv(reference) @ candidate
     cosine = np.clip((np.trace(delta[:3, :3]) - 1) / 2, -1, 1)
     translation = float(np.linalg.norm(delta[:3, 3]))
-    if unit == "mm":
-        translation *= 1000.0
     return translation, float(np.degrees(np.arccos(cosine)))
 
 

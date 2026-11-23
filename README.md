@@ -76,10 +76,10 @@ bash src/fdpose_bringup/scripts/run_330s.sh
 bash src/fdpose_bringup/scripts/run_d415.sh
 ```
 
-**无头 ROS 2 节点** —— SSH / 无显示器，先启动 Orbbec 驱动，再在同一 ROS 域运行：
+**无头运行** —— SSH / 无显示器。Gemini 先启动 Orbbec 驱动，再在同一 ROS 域运行；D415 直连，加 `camera:=d415` 即可：
 
 ```bash
-ros2 launch fdpose_bringup fdpose_node.launch.py serial:=CPCD7530009J \
+ros2 launch fdpose_bringup fdpose_live.launch.py serial:=CPCD7530009J frames:=0 \
   output:="artifacts/gemini-node-$(date +%Y%m%d-%H%M%S)"
 ros2 topic echo /fdpose/pose --once
 ```
@@ -90,13 +90,9 @@ ros2 topic echo /fdpose/pose --once
 
 ### ROS 2 启动
 
-| Launch | 组合 | 相机前置 |
-| --- | --- | --- |
-| `fdpose_live.launch.py` | 桌面 CLI + 位姿话题 | Orbbec 驱动 |
-| `fdpose_node.launch.py` | 无头位姿节点 | Orbbec 驱动 |
-| `fdpose_d415.launch.py` | D415 发布节点 + 位姿节点 | 无需驱动 |
+唯一 launch 是 `fdpose_live.launch.py`，运行桌面 CLI 但不加 `--show`，因此默认无头。`camera` 选 `orbbec-ros`（默认，需先启动 Orbbec 驱动）或 `d415`（直连，无需驱动）。
 
-公共参数：`serial`、`output`（必填）、`project_root`、`python`、`mesh`、`geometry`、`weights`、`pose_topic`、`camera_namespace`、`frames`。全部参数用 `--show-args` 查看，话题与坐标系约定见 [fdpose_bringup](src/fdpose_bringup/README.md)。
+公共参数：`serial`、`output`（必填）、`camera`、`project_root`、`python`、`mesh`、`geometry`、`weights`、`pose_topic`、`camera_namespace`、`frames`（`0` 为持续运行）。全部参数用 `--show-args` 查看，话题与坐标系约定见 [fdpose_bringup](src/fdpose_bringup/README.md)。
 
 `/fdpose/pose` 发布 `geometry_msgs/msg/PoseStamped`，等价于 JSON 里的 `T_camera_target_m`：平移单位米，四元数 x/y/z/w。Gemini 用彩色光学坐标系与采集时间戳，D415 用 `camera_color_optical_frame` 与主机读帧时刻。**丢失期间停止发布**，订阅端应检查时间戳判断数据是否过期。
 
@@ -145,7 +141,7 @@ D415 写入 `artifacts/d415-live-*`，Gemini 写入 `artifacts/gemini-330s-*/pos
 失配现场可离线回放，默认在原生分辨率与 640 像素宽度下分别跟踪、复核并计时：
 
 ```bash
-python src/fdpose_tools/fdpose_tools/replay_drift.py <漂移目录> --output <结果.json>
+python src/fdpose_perception/fdpose_perception/replay_drift.py <漂移目录> --output <结果.json>
 ```
 
 <details>
@@ -153,10 +149,8 @@ python src/fdpose_tools/fdpose_tools/replay_drift.py <漂移目录> --output <�
 
 ```text
 src/
-  fdpose_camera/      RGB-D 接入 · D415 发布节点
-  fdpose_perception/  几何 · 流程 · 复核 · 记录 · 预览 · 适配层 · 桌面 CLI · 无头节点
-  fdpose_bringup/     组合启动（CLI / 节点 / D415）· scripts/ 桌面入口
-  fdpose_tools/       漂移回放 · 离线评估 · 采集 · 重建
+  fdpose_perception/  相机接入 · 几何 · 流程 · 复核 · 记录 · 预览 · 适配层 · CLI · 漂移回放
+  fdpose_bringup/     launch 组合启动 · scripts/ 桌面入口
 scripts/setup/        Jetson 部署脚本
 config/               运行时约束、上游版本、几何配置、mesh/ 零件网格
 patches/              上游适配补丁
