@@ -30,9 +30,10 @@ def write_json(path, data):
     _write_json(path, data, allow_nan=False)
 
 
-def instrument(estimator, timings, frames=None):
+def instrument(estimator_cls, timings, frames=None):
+    """Patch the class, not an instance: both runpy paths build their own estimator internally."""
     for method in ("register", "track_one"):
-        original = getattr(estimator, method)
+        original = getattr(estimator_cls, method)
 
         def wrapper(original, method):
             @wraps(original)
@@ -50,10 +51,10 @@ def instrument(estimator, timings, frames=None):
 
             return timed
 
-        setattr(estimator, method, wrapper(original, method))
+        setattr(estimator_cls, method, wrapper(original, method))
 
 
-def capture(directory, serial, estimator):
+def capture(directory, serial, estimator_cls):
     sys.path.insert(0, str(PROJECT / "third_party/sam2"))
     from sam2.sam2_image_predictor import SAM2ImagePredictor
 
@@ -76,7 +77,7 @@ def capture(directory, serial, estimator):
         setattr(SAM2ImagePredictor, method, wrapper(original, method))
 
     timings, frames = [], []
-    instrument(estimator, timings, frames)
+    instrument(estimator_cls, timings, frames)
     script = PROJECT / "src/fdpose_perception/fdpose_perception/live_pose.py"
     live = directory / "live"
     sys.argv = [str(script), "--serial", serial, "--mesh", str(MESH),
@@ -115,7 +116,7 @@ def pose_delta(reference, candidate):
     return _pose_delta(reference, candidate, unit="mm")
 
 
-def compare(directory, estimator):
+def compare(directory, estimator_cls):
     from datareader import YcbineoatReader
     from Utils import draw_posed_3d_box
 
@@ -124,7 +125,7 @@ def compare(directory, estimator):
     mesh = trimesh.load(scene / "socket_m.ply", force="mesh")
     script = FOUNDATIONPOSE / "run_demo.py"
     timings = []
-    instrument(estimator, timings)
+    instrument(estimator_cls, timings)
     # Supply the original float depth values to both paths. Standard PNGs are
     # also saved so the official demo can replay this directory directly.
     YcbineoatReader.get_depth = lambda self, i: np.load(
