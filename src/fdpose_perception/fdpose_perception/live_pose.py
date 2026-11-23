@@ -10,8 +10,7 @@ import sys
 CODE_ROOT = Path(__file__).resolve().parents[3]
 ROOT = Path(os.environ.get("FDPOSE_ROOT", CODE_ROOT)).resolve()
 sys.path.insert(0, str(CODE_ROOT / "src/fdpose_perception"))
-sys.path.insert(0, str(CODE_ROOT / "src/fdpose_camera"))
-from fdpose_camera.rgbd import open_d415
+from fdpose_perception.rgbd import open_d415
 from fdpose_perception.adapters.foundationpose import draw_pose
 from fdpose_perception.adapters.ros2 import PosePublisher
 from fdpose_perception.frontend import (add_common_args, bootstrap, build_summary, make_pipeline,
@@ -54,7 +53,7 @@ def main():
     model = bootstrap(args, ROOT)
     with ExitStack() as stack:
         if args.camera == "orbbec-ros":
-            from fdpose_camera.orbbec_ros import open_orbbec_ros
+            from fdpose_perception.orbbec_ros import open_orbbec_ros
 
             camera = stack.enter_context(open_orbbec_ros(args.serial, args.camera_namespace))
         else:

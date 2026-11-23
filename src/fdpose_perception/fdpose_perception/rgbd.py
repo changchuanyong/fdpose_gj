@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from fdpose_camera.calibration import rectify_maps
+from fdpose_perception.calibration import rectify_maps
 
 
 @dataclass
