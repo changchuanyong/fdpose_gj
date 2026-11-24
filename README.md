@@ -32,14 +32,12 @@ flowchart LR
 
 ## 安装
 
-需要 Jetson AGX Orin（JetPack 6.2 / CUDA 12.6 / Ubuntu 22.04 aarch64）、ROS 2 Humble、Python 3.10 虚拟环境。
+需要 Jetson AGX Orin（JetPack 6.2 / CUDA 12.6 / Ubuntu 22.04 aarch64）、ROS 2 Humble 和 Miniforge。部署脚本在 `~/miniforge3/envs/fdpose` 创建独立 Conda 环境，旧 venv 不会自动删除。
 
-在仓库根目录执行以下命令。`jetson_setup.sh all` 检出并修补 FoundationPose、准备 Python 虚拟环境并编译扩展。
+在仓库根目录执行以下命令。`jetson_setup.sh all` 检出并修补 FoundationPose、准备 Conda 环境并编译扩展。
 
 ```bash
-REPO="$PWD/third_party/FoundationPose" VENV="$HOME/venvs/ev-charging-d415-gpu" \
-PATCH="$PWD/patches/0001-platform-compat.patch" REQ="$PWD/config/runtime-jetson.txt" \
-WORK="$HOME/foundationpose-deploy" bash scripts/jetson_setup.sh all
+bash scripts/jetson_setup.sh all
 ```
 
 如果使用 Gemini 或通过 ROS 2 launch 启动位姿节点，先按 [上游版本清单](config/upstream.json) 将 Orbbec 驱动放到 `third_party/OrbbecSDK_ROS2`，再按下方命令构建工作区。仅用 D415 桌面脚本可跳过 ROS 2 构建。
@@ -62,7 +60,7 @@ source install/local_setup.bash
 | `third_party/sam2` | 固定版本的 SAM2 源码，使用默认的 SAM2 掩膜后端时需要 |
 | `third_party/OrbbecSDK_ROS2` | Orbbec ROS 2 驱动 v1.5.21（含 aarch64 SDK 库），构建上述 ROS 2 工作区时需要 |
 
-部署脚本从固定提交构建 PyTorch3D 和 nvdiffrast。上游提交见 [config/upstream.json](config/upstream.json)，FoundationPose 补丁见 [patches/README.md](patches/README.md)，依赖约束见 [config/runtime-jetson.txt](config/runtime-jetson.txt)。两处易踩的坑：`opencv-python-headless` 必须 5.x（4.14 在 `draw_xyz_axis` 的 `tipLength=0` 上断言失败）；`warp-lang` 固定 1.9.1（1.19.0 自带 CUDA 13.4，会判 Orin 驱动不足而退回 CPU）。
+部署脚本从固定提交构建 PyTorch3D 和 nvdiffrast。上游提交见 [config/upstream.json](config/upstream.json)，FoundationPose 补丁见 [patches/README.md](patches/README.md)，依赖约束见 [config/runtime-jetson.txt](config/runtime-jetson.txt)。启动脚本默认使用 Conda 环境，也可用 `FDPOSE_PYTHON` 覆盖解释器。两处易踩的坑：`opencv-python-headless` 必须 5.x（4.14 在 `draw_xyz_axis` 的 `tipLength=0` 上断言失败）；`warp-lang` 固定 1.9.1（1.19.0 自带 CUDA 13.4，会判 Orin 驱动不足而退回 CPU）。
 
 </details>
 

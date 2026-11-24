@@ -1,6 +1,6 @@
 # fdpose_bringup
 
-在仓库根目录构建感知与启动包。`fdpose_live.launch.py` 是唯一 launch，运行 `fdpose_perception/live_pose.py`：`camera` 选 `orbbec-ros`（默认）或 `d415`，不传 `--show`，所以经 launch 启动默认就是无头位姿节点。权重、网格与 `third_party/` 从 `project_root` 读取。Jetson 上的 `python` 启动参数默认指向 `~/venvs/ev-charging-d415-gpu/bin/python`。
+在仓库根目录构建感知与启动包。`fdpose_live.launch.py` 是唯一 launch，运行 `fdpose_perception/live_pose.py`：`camera` 选 `orbbec-ros`（默认）或 `d415`，不传 `--show`，所以经 launch 启动默认就是无头位姿节点。权重、网格与 `third_party/` 从 `project_root` 读取。Jetson 上的 `python` 启动参数默认指向 `~/miniforge3/envs/fdpose/bin/python`，也可用 `FDPOSE_PYTHON` 覆盖。
 
 ```bash
 source /opt/ros/humble/setup.bash

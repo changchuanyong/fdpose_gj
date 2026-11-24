@@ -9,7 +9,8 @@ from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 
 
 DEFAULT_ROOT = os.environ.get("FDPOSE_ROOT", str(Path.home() / "fdonpose-git"))
-DEFAULT_PYTHON = str(Path.home() / "venvs/ev-charging-d415-gpu/bin/python")
+DEFAULT_PYTHON = os.environ.get(
+    "FDPOSE_PYTHON", str(Path.home() / "miniforge3/envs/fdpose/bin/python"))
 
 
 def generate_launch_description():
@@ -37,5 +38,7 @@ def generate_launch_description():
         DeclareLaunchArgument("frames", default_value="60"),
         DeclareLaunchArgument("camera", default_value="orbbec-ros"),
         ExecuteProcess(cmd=[LaunchConfiguration("python"), "-u", entry] + flags,
-                       cwd=root, additional_env={"FDPOSE_ROOT": root}, output="screen"),
+                       cwd=root,
+                       additional_env={"FDPOSE_ROOT": root, "PYTHONNOUSERSITE": "1"},
+                       output="screen"),
     ])
