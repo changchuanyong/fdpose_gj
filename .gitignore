@@ -17,7 +17,6 @@ install/
 log/
 
 # 运行时资源（体积大，不随仓库分发）
-weights/
 *.mp4
 data/
 

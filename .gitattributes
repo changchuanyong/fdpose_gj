@@ -18,3 +18,7 @@
 *.ply   binary
 *.STL   binary
 *.PLY   binary
+
+# 模型权重
+weights/best.pt filter=lfs diff=lfs merge=lfs -text
+weights/sam2.1_hiera_small.pt filter=lfs diff=lfs merge=lfs -text

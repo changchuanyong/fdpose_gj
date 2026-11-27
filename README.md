@@ -55,7 +55,9 @@ source install/local_setup.bash
 ```
 
 <details>
-<summary><b>运行前必须就位的资产</b>（体积大，不入库）</summary>
+<summary><b>运行前必须就位的资产</b></summary>
+
+`weights/` 下的 YOLO 和 SAM2.1 权重通过 Git LFS 分发。安装 Git LFS 后，在仓库根目录运行 `git lfs pull` 下载权重。
 
 | 路径 | 内容 |
 | --- | --- |
