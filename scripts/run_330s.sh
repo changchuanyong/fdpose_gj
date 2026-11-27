@@ -7,8 +7,13 @@ if [[ -z ${ROS_DISTRO:-} ]]; then
   ROS_DISTRO=humble
   [[ ! -f /opt/ros/jazzy/setup.bash ]] || ROS_DISTRO=jazzy
 fi
-source "/opt/ros/$ROS_DISTRO/setup.bash"
-source install/local_setup.bash
+# User-local Jazzy builds can keep Orbbec's ROS libraries outside /opt/ros.
+if [[ "$ROS_DISTRO" == jazzy && -r .runtime/jetson-setup/orbbec-env.bash ]]; then
+  source .runtime/jetson-setup/orbbec-env.bash
+else
+  source "/opt/ros/$ROS_DISTRO/setup.bash"
+  source install/local_setup.bash
+fi
 set -u
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-117}"
 export ROS_LOCALHOST_ONLY="${ROS_LOCALHOST_ONLY:-1}"
