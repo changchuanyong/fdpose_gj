@@ -3,7 +3,11 @@ set -eo pipefail
 
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 
-source /opt/ros/humble/setup.bash
+if [[ -z ${ROS_DISTRO:-} ]]; then
+  ROS_DISTRO=humble
+  [[ ! -f /opt/ros/jazzy/setup.bash ]] || ROS_DISTRO=jazzy
+fi
+source "/opt/ros/$ROS_DISTRO/setup.bash"
 source install/local_setup.bash
 set -u
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-117}"

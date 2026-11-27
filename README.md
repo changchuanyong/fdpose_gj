@@ -4,9 +4,9 @@
 
 **Jetson 上的零件 6D 位姿估计与跟踪，支持 RGB-D 输入、桌面预览和 ROS 2 位姿发布**
 
-![python](https://img.shields.io/badge/python-3.10-blue)
-![ros2](https://img.shields.io/badge/ROS%202-Humble-22314e)
-![jetpack](https://img.shields.io/badge/JetPack-6.2%20%7C%20CUDA%2012.6-76b900)
+![python](https://img.shields.io/badge/python-3.10%20%7C%203.12-blue)
+![ros2](https://img.shields.io/badge/ROS%202-Humble%20%7C%20Jazzy-22314e)
+![cuda](https://img.shields.io/badge/CUDA-12.6%20%7C%2013.2-76b900)
 
 [ROS 2 启动](src/fdpose_bringup/README.md) · [上游 FoundationPose](https://github.com/NVlabs/FoundationPose)
 
@@ -32,7 +32,12 @@ flowchart LR
 
 ## 安装
 
-需要 Jetson AGX Orin（JetPack 6.2 / CUDA 12.6 / Ubuntu 22.04 aarch64）、ROS 2 Humble 和 Miniforge。部署脚本在 `~/miniforge3/envs/fdpose` 创建独立 Conda 环境，旧 venv 不会自动删除。
+需要 Jetson AGX Orin（aarch64）和 Miniforge。部署脚本按 `/etc/nv_tegra_release` 选择依赖，在 `~/miniforge3/envs/fdpose` 创建独立 Conda 环境。若已有不匹配的环境，请用 `CONDA_ENV` 指定新路径，并用 `FDPOSE_PYTHON` 指向其中的 Python；脚本不会原地升级旧环境的 Python。
+
+| 系统 | CUDA | Conda Python | ROS 2（ROS 模式） |
+| --- | --- | --- | --- |
+| L4T R39 / Ubuntu 24.04 | 13.2 | 3.12 | Jazzy |
+| L4T R36 / Ubuntu 22.04 | 12.6 | 3.10 | Humble |
 
 在仓库根目录执行以下命令。`jetson_setup.sh all` 检出并修补 FoundationPose、准备 Conda 环境并编译扩展。
 
@@ -43,7 +48,7 @@ bash scripts/jetson_setup.sh all
 如果使用 Gemini 或通过 ROS 2 launch 启动位姿节点，先按 [上游版本清单](config/upstream.json) 将 Orbbec 驱动放到 `third_party/OrbbecSDK_ROS2`，再按下方命令构建工作区。仅用 D415 桌面脚本可跳过 ROS 2 构建。
 
 ```bash
-source /opt/ros/humble/setup.bash
+source /opt/ros/jazzy/setup.bash  # R36 改为 /opt/ros/humble/setup.bash
 export FDPOSE_ROOT="$PWD"
 colcon build --symlink-install --base-paths src third_party/OrbbecSDK_ROS2 --packages-up-to fdpose_bringup
 source install/local_setup.bash
@@ -87,7 +92,7 @@ bash scripts/run_d415.sh
 每个终端都先进入仓库根目录，再加载环境：
 
 ```bash
-source /opt/ros/humble/setup.bash
+source /opt/ros/jazzy/setup.bash  # R36 改为 /opt/ros/humble/setup.bash
 source install/local_setup.bash
 export FDPOSE_ROOT="$PWD"
 ```
